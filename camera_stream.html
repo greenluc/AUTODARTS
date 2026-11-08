@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Dartly – Handy als Board-Kamera</title>
+<!-- html5-qrcode Bibliothek für den Scanner -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+<style>
+  :root { --accent:#00ff88; --bg:#0a0c10; --card:rgba(28,31,38,.9); --gray:rgba(255,255,255,.55); --danger:#ff4757; --warn:#f1c40f; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:#fff; font-family:system-ui,-apple-system,Segoe UI,sans-serif; min-height:100vh; display:flex; flex-direction:column; align-items:center; padding:18px; }
+  h1 { font-size:1.5rem; margin:6px 0 2px; letter-spacing:.5px; } .sub { color:var(--gray); font-size:.8rem; letter-spacing:2px; margin:0 0 14px; }
+  .card { width:100%; max-width:480px; background:var(--card); border:1px solid rgba(255,255,255,.08); border-radius:20px; padding:20px; margin-bottom:14px; }
+  label { display:block; font-size:.8rem; color:var(--gray); margin-bottom:6px; }
+  input { width:100%; font-size:2rem; letter-spacing:.35em; text-align:center; padding:12px; border-radius:12px; border:1px solid rgba(255,255,255,.15); background:rgba(255,255,255,.06); color:#fff; font-weight:700; }
+  button { border:0; border-radius:12px; padding:13px 16px; font-size:1rem; font-weight:700; cursor:pointer; background:#2d3550; color:#fff; }
+  button.primary { background:var(--accent); color:#00331c; width:100%; margin-top:14px; font-size:1.1rem; }
+  button.secondary { background:rgba(255,255,255,0.1); width:100%; margin-top:8px; font-size:0.95rem; }
+  button:disabled { opacity:.45; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; margin-top:12px; } .row button { flex:1; min-width:130px; }
+  video { width:100%; border-radius:14px; background:#000; display:block; }
+  .chip { display:inline-flex; align-items:center; gap:8px; padding:7px 12px; border-radius:20px; background:rgba(255,255,255,.08); font-weight:600; font-size:.9rem; }
+  .dot { width:10px; height:10px; border-radius:50%; background:var(--warn); } .dot.ok { background:var(--accent); box-shadow:0 0 8px var(--accent); } .dot.bad { background:var(--danger); }
+  .stats { margin-top:10px; color:var(--gray); font-size:.85rem; line-height:1.6; }
+  .tip { font-size:.85rem; color:var(--gray); line-height:1.5; margin:12px 0 0; }
+  .err { color:#ff8a95; font-size:.9rem; margin-top:10px; white-space:pre-wrap; }
+  #dim { position:fixed; inset:0; background:#000; z-index:50; display:none; align-items:flex-end; justify-content:center; padding:30px; color:#222; font-size:.9rem; }
+  #dim.on { display:flex; }
+  #scanner-modal { position:fixed; inset:0; background:rgba(0,0,0,0.9); z-index:100; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:20px; }
+  #scanner-container { width:100%; max-width:400px; border-radius:14px; overflow:hidden; background:#000; }
+  [hidden] { display:none !important; }
+</style>
+</head>
+<body>
+  <h1>📱 Handy-Kamera</h1>
+  <p class="sub">DARTLY · STREAM ZUM TABLET</p>
+
+  <div class="card" id="setup">
+    <label for="code">Code vom Tablet (6 Ziffern)</label>
+    <input id="code" inputmode="numeric" maxlength="6" placeholder="••••••" autocomplete="off">
+    <button class="primary" id="start">Kamera starten &amp; verbinden</button>
+    <button class="secondary" id="scanBtn">📷 QR-Code scannen</button>
+    <p class="tip">Handy fest aufstellen (Stativ/Halterung) und am Ladekabel lassen. Danach brauchst du es nicht mehr anzufassen – Zoom, Licht und Auflösung steuerst du vom Tablet.</p>
+    <div class="err" id="err"></div>
+  </div>
+
+  <!-- QR-Scanner Overlay -->
+  <div id="scanner-modal" hidden>
+    <div style="width:100%; max-width:400px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
+      <span style="font-weight:600;">QR-Code vor die Kamera halten</span>
+      <button id="closeScan" style="padding:8px 14px; background:var(--danger);">Abbrechen</button>
+    </div>
+    <div id="scanner-container"></div>
+  </div>
+
+  <div class="card" id="live" hidden>
+    <video id="preview" autoplay muted playsinline></video>
+    <div style="margin-top:12px; display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
+      <span class="chip"><span class="dot" id="dot"></span><span id="status">Starte …</span></span>
+      <span class="chip" id="awake">🔆 Display an</span>
+    </div>
+    <div class="stats" id="stats"></div>
+    <div class="row">
+      <button id="dimBtn">Bildschirm abdunkeln</button>
+      <button id="stopBtn">Trennen</button>
+    </div>
+    <p class="tip">Diese Seite im Vordergrund lassen (nicht in andere Apps wechseln), sonst pausiert das Handy die Kamera.</p>
+    <div class="err" id="err2"></div>
+  </div>
+
+  <div id="dim"><span>Zum Aufwecken tippen</span></div>
+
+<script type="module">
+import { db } from './firebase_config.js';
+import { 
+    doc, setDoc, onSnapshot, arrayUnion 
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+const RTC_CONFIG = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+  ],
+};
+
+const $ = id => document.getElementById(id);
+const params = new URLSearchParams(location.search);
+const store = { get: k => { try { return localStorage.getItem(k); } catch (_) { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (_) {} } };
+
+const S = { facing: 'environment', w: 1280, h: 720, stream: null, track: null, peerConnection: null, wake: null, running: false };
+let lastBytes = 0, lastAt = 0, statTimer = null, html5QrCode = null;
+let signalingDocRef = null, unsubscribeSnapshot = null;
+let cameraProcessedCandidates = new Set();
+let camIceQueue = [];
+let camIceBuffer = [];
+let camIceTimer = null;
+
+const setStatus = (t, kind) => { $('status').textContent = t; $('dot').className = 'dot' + (kind ? ' ' + kind : ''); };
+const showErr = (t, id = 'err') => { $(id).textContent = t || ''; };
+
+async function openCamera(facing, w, h) {
+  const s = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: facing }, width: { ideal: w }, height: { ideal: h }, frameRate: { ideal: 30, max: 30 } } });
+  const t = s.getVideoTracks()[0];
+  try { t.contentHint = 'detail'; } catch (_) {}
+  return s;
+}
+
+function adopt(stream) {
+  S.stream = stream; 
+  S.track = stream.getVideoTracks()[0]; 
+  $('preview').srcObject = stream;
+}
+
+async function outStats() {
+  const pc = S.peerConnection; if (!pc || pc.connectionState !== 'connected') return;
+  try {
+    const rep = await pc.getStats(); let out = null; 
+    rep.forEach(r => { if (r.type === 'outbound-rtp' && (r.kind === 'video' || r.mediaType === 'video')) out = r; });
+    if (!out) return; 
+    const now = Date.now(); let mbit = '';
+    if (lastBytes && now > lastAt) mbit = ` · ${(((out.bytesSent - lastBytes) * 8) / (now - lastAt) / 1000).toFixed(1)} Mbit/s`;
+    lastBytes = out.bytesSent; lastAt = now;
+    $('stats').textContent = `Sendet ${out.frameWidth || '?'}×${out.frameHeight || '?'} · ${Math.round(out.framesPerSecond || 0)} fps${mbit}`;
+  } catch (_) {}
+}
+
+async function setupWebRTC(cleanCode) {
+  cameraProcessedCandidates.clear();
+  camIceQueue = [];
+  camIceBuffer = [];
+
+  if (S.peerConnection) {
+    S.peerConnection.close();
+  }
+
+  S.peerConnection = new RTCPeerConnection(RTC_CONFIG);
+  const pc = S.peerConnection;
+
+  pc.oniceconnectionstatechange = () => {
+    setStatus(`ICE: ${pc.iceConnectionState}`, pc.iceConnectionState === 'connected' ? 'ok' : '');
+  };
+
+  S.stream.getTracks().forEach(track => pc.addTrack(track, S.stream));
+  signalingDocRef = doc(db, "signaling", cleanCode);
+
+  pc.onicecandidate = (event) => {
+    if (event.candidate) {
+      camIceBuffer.push(JSON.stringify(event.candidate));
+      if (!camIceTimer) {
+        camIceTimer = setTimeout(async () => {
+          const batch = [...camIceBuffer];
+          camIceBuffer = [];
+          camIceTimer = null;
+          if (batch.length > 0) {
+            await setDoc(signalingDocRef, { cameraIceCandidates: arrayUnion(...batch) }, { merge: true }).catch(() => {});
+          }
+        }, 300);
+      }
+    }
+  };
+
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+
+  await setDoc(signalingDocRef, {
+    offer: JSON.stringify({ type: offer.type, sdp: offer.sdp }),
+    answer: null,
+    cameraIceCandidates: [],
+    hubIceCandidates: [],
+    updatedAt: new Date().toISOString()
+  });
+
+  setStatus('Warte auf Tablet...', '');
+
+  if (unsubscribeSnapshot) unsubscribeSnapshot();
+
+  unsubscribeSnapshot = onSnapshot(signalingDocRef, async (snapshot) => {
+    const data = snapshot.data();
+    if (!data) return;
+
+    // Sobald das Tablet eine Answer schickt
+    if (data.answer && !pc.currentRemoteDescription) {
+      try {
+        const answerObj = JSON.parse(data.answer);
+        await pc.setRemoteDescription(new RTCSessionDescription(answerObj));
+        setStatus('Verbunden 🟢', 'ok');
+
+        for (const cand of camIceQueue) {
+          await pc.addIceCandidate(cand).catch(() => {});
+        }
+        camIceQueue = [];
+      } catch (e) {
+        console.error("Fehler beim Verarbeiten der Answer:", e);
+      }
+    }
+
+    // Hub ICE Kandidaten empfangen
+    if (data.hubIceCandidates && Array.isArray(data.hubIceCandidates)) {
+      for (const candidateStr of data.hubIceCandidates) {
+        if (!cameraProcessedCandidates.has(candidateStr)) {
+          cameraProcessedCandidates.add(candidateStr);
+          try {
+            const candidate = new RTCIceCandidate(JSON.parse(candidateStr));
+            if (pc.remoteDescription && pc.remoteDescription.type) {
+              await pc.addIceCandidate(candidate);
+            } else {
+              camIceQueue.push(candidate);
+            }
+          } catch (e) {}
+        }
+      }
+    }
+  });
+}
+
+async function start() {
+  const code = $('code').value.replace(/\D/g, '');
+  if (code.length !== 6) { showErr('Bitte den 6-stelligen Code vom Tablet eingeben.'); return; }
+  showErr(''); $('start').disabled = true; store.set('dartly_stream_code', code);
+  
+  try {
+    adopt(await openCamera(S.facing, S.w, S.h));
+    $('setup').hidden = true; 
+    $('live').hidden = false; 
+    S.running = true; 
+    store.set('dartly_stream_auto', '1');
+    setStatus('Verbinde mit Tablet …', ''); 
+    
+    // Wake Lock aktivieren, damit das Handy nicht abdunkelt
+    try {
+      if (navigator.wakeLock) S.wake = await navigator.wakeLock.request('screen');
+    } catch (_) {}
+
+    await setupWebRTC(code);
+
+    clearInterval(statTimer); 
+    statTimer = setInterval(outStats, 2000);
+  } catch (e) {
+    console.error(e); 
+    $('start').disabled = false; 
+    $('setup').hidden = false; 
+    $('live').hidden = true; 
+    S.running = false;
+    const n = e && e.name; 
+    showErr(n === 'NotAllowedError' ? 'Kamera-Zugriff verweigert.' : 'Start fehlgeschlagen: ' + (e.message || e));
+  }
+}
+
+function stopAll(manual = true) {
+  S.running = false; 
+  if (manual) store.set('dartly_stream_auto', '0');
+  clearInterval(statTimer);
+  if (camIceTimer) { clearTimeout(camIceTimer); camIceTimer = null; }
+  if (unsubscribeSnapshot) unsubscribeSnapshot();
+  if (S.peerConnection) { S.peerConnection.close(); S.peerConnection = null; }
+  S.stream && S.stream.getTracks().forEach(t => t.stop());
+  S.wake && S.wake.release && S.wake.release().catch(() => {}); 
+  $('preview').srcObject = null;
+  $('live').hidden = true; 
+  $('setup').hidden = false; 
+  $('start').disabled = false;
+}
+
+// QR Scanner Logik
+async function startScanner() {
+  $('scanner-modal').hidden = false;
+  if (!html5QrCode) {
+    html5QrCode = new Html5Qrcode("scanner-container");
+  }
+  try {
+    await html5QrCode.start(
+      { facingMode: "environment" },
+      { fps: 10, qrbox: { width: 250, height: 250 } },
+      (decodedText) => {
+        const cleanCode = decodedText.replace(/\D/g, '').slice(0, 6);
+        if (cleanCode.length === 6) {
+          $('code').value = cleanCode;
+          stopScanner();
+          start();
+        }
+      },
+      () => {}
+    );
+  } catch (err) {
+    showErr('Kamera-Zugriff für QR-Scanner fehlgeschlagen.');
+    stopScanner();
+  }
+}
+
+async function stopScanner() {
+  if (html5QrCode && html5QrCode.isScanning) {
+    try { await html5QrCode.stop(); } catch (e) {}
+  }
+  $('scanner-modal').hidden = true;
+}
+
+$('code').value = (params.get('code') || store.get('dartly_stream_code') || '').replace(/\D/g, '').slice(0, 6);
+$('start').addEventListener('click', start);
+$('scanBtn').addEventListener('click', startScanner);
+$('closeScan').addEventListener('click', stopScanner);
+$('stopBtn').addEventListener('click', () => stopAll(true));
+$('dimBtn').addEventListener('click', () => $('dim').classList.add('on'));
+$('dim').addEventListener('click', () => $('dim').classList.remove('on'));
+
+if ($('code').value.length === 6 && (params.get('code') ? false : store.get('dartly_stream_auto') === '1')) start();
+</script>
+</body>
+</html>
