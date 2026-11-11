@@ -30,17 +30,19 @@
   #scanner-modal { position:fixed; inset:0; background:rgba(0,0,0,0.9); z-index:100; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:20px; }
   #scanner-container { width:100%; max-width:400px; border-radius:14px; overflow:hidden; background:#000; }
   [hidden] { display:none !important; }
+  .ico { width:1.1em; height:1.1em; vertical-align:-0.2em; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; margin-right:.4em; }
+  .ico.fill { fill:currentColor; stroke:none; }
 </style>
 </head>
 <body>
-  <h1>📱 Handy-Kamera</h1>
+  <h1><svg class="ico" viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2.5"/><path d="M11 18.5h2"/></svg>Handy-Kamera</h1>
   <p class="sub">DARTLY · STREAM ZUM TABLET</p>
 
   <div class="card" id="setup">
     <label for="code">Code vom Tablet (6 Ziffern)</label>
     <input id="code" inputmode="numeric" maxlength="6" placeholder="••••••" autocomplete="off">
     <button class="primary" id="start">Kamera starten &amp; verbinden</button>
-    <button class="secondary" id="scanBtn">📷 QR-Code scannen</button>
+    <button class="secondary" id="scanBtn"><svg class="ico" viewBox="0 0 24 24"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/><path d="M4 12h16"/></svg>QR-Code scannen</button>
     <p class="tip">Handy fest aufstellen (Stativ/Halterung) und am Ladekabel lassen. Danach brauchst du es nicht mehr anzufassen – Zoom, Licht und Auflösung steuerst du vom Tablet.</p>
     <div class="err" id="err"></div>
   </div>
@@ -58,7 +60,7 @@
     <video id="preview" autoplay muted playsinline></video>
     <div style="margin-top:12px; display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
       <span class="chip"><span class="dot" id="dot"></span><span id="status">Starte …</span></span>
-      <span class="chip" id="awake">🔆 Display an</span>
+      <span class="chip" id="awake"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M5 19l1.5-1.5M17.5 6.5L19 5"/></svg>Display an</span>
     </div>
     <div class="stats" id="stats"></div>
     <div class="row">
@@ -186,7 +188,7 @@ async function setupWebRTC(cleanCode) {
       try {
         const answerObj = JSON.parse(data.answer);
         await pc.setRemoteDescription(new RTCSessionDescription(answerObj));
-        setStatus('Verbunden 🟢', 'ok');
+        setStatus('Verbunden', 'ok');
 
         for (const cand of camIceQueue) {
           await pc.addIceCandidate(cand).catch(() => {});
