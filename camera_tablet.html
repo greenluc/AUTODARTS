@@ -180,11 +180,18 @@
             justify-content: center;
             min-height: 0;
         }
+        .detection-debug {
+            position: absolute; z-index: 20; top: 8px; right: 8px; width: min(210px, 58%);
+            padding: 8px 10px; border: 1px solid rgba(255,255,255,.18); border-radius: 9px;
+            background: rgba(5,8,12,.82); color: #fff; font: 11px/1.4 system-ui,sans-serif;
+            pointer-events: none; backdrop-filter: blur(4px);
+        }
+        .detection-debug strong { display:block; color:#00ff88; font-size:11px; margin-bottom:2px; }
 
         video#webcam, img#screenshot-preview {
             display: block;
             width: 100%;
-            height: auto;
+            height: 100%;
             object-fit: contain;
             box-shadow: none;
         }
@@ -340,6 +347,7 @@
             <!-- Kamera & Video Viewport -->
             <div class="camera-wrapper">
                 <video id="webcam" autoplay playsinline muted></video>
+                <div class="detection-debug" id="detection-debug" hidden><strong>Bildvergleich</strong><span id="debug-state">Warte auf Bild</span><br><span id="debug-diff">Änderung: —</span></div>
                 <input type="file" id="video-upload-input" accept="video/*" style="display: none;">
                 <input type="file" id="image-upload-input" accept="image/*" style="display: none;">
             </div>
@@ -360,7 +368,6 @@
                     <span id="calibration-status">Initialisiere...</span>
                 </div>
                 <div class="btn-group">
-                    <button class="btn-action" id="btn-ref">Darts gezogen</button>
                     <button class="btn-action" id="btn-grid">Raster</button>
                     <button class="btn-action" id="btn-auto" style="background: rgba(0,255,136,0.15); border-color: rgba(0,255,136,0.4);"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>Auto-Erkennung</button>
                     <button class="btn-action" id="btn-manual">15-Punkte Kalibrierung</button>
@@ -470,7 +477,7 @@ const DEFAULTS = {
     startRatio: 0.004,
     refRatio: 0.0012,            // Änderung gegenüber der Referenz, ab der geprüft wird (kleine, ruhig einschlagende Darts)
     stillRatio: 0.0015,
-    stillFrames: 6,
+    stillFrames: 10,
     maxChangeRatio: 0.12,
     minBlobPixels: 3,
     roiRadius: 125,
@@ -486,7 +493,7 @@ const DEFAULTS = {
   },
   targetMm: 0.2,
   autoLevel: 3,                  // Auto-Kalibrierung: 1 (minimal) … 5 (maximal)
-  turn: { darts: 3, emptyRatio: 0.004 },   // Darts je Aufnahme; darunter gilt das Board als leer (Darts gezogen)
+  turn: { darts: 3, emptyRatio: 0.006 },   // Leere Boardfläche nach dem Herausziehen automatisch erkennen
   marks: { tip: true, flight: true, label: true },   // Markierungen: Spitze (roter Punkt), Flight (blauer Ring), Beschriftung
   feedbackMs: 3000,
   onHit: null,
@@ -1277,6 +1284,11 @@ class ManualCalibrationOverlay {
       };
       const showLoupe = p => {
         if (!p) { loupe.style.display = 'none'; return; }
+        const inRight = p.x < w / 2, inBottom = p.y < h / 2;
+        loupe.style.left = inRight ? 'auto' : '8px';
+        loupe.style.right = inRight ? '8px' : 'auto';
+        loupe.style.top = inBottom ? 'auto' : '8px';
+        loupe.style.bottom = inBottom ? '8px' : 'auto';
         const span = 36 * Math.max(1, w / 1280);
         lctx.clearRect(0, 0, 144, 144);
         try { lctx.drawImage(this.mediaSource, p.x - span / 2, p.y - span / 2, span, span, 0, 0, 144, 144); } catch (_) {}
@@ -1892,6 +1904,8 @@ class AutoDartsEngine {
 
   beginDetection() {
     if (!this.camSize) return;
+    const debugPanel = document.getElementById('detection-debug');
+    if (debugPanel) debugPanel.hidden = false;
     this.running = true; this.state = 'init'; this.still = 0; this.prev = null; this.reference = null;
     this.resetTurnState();
     const mediaSource = this.video;
@@ -1921,6 +1935,12 @@ class AutoDartsEngine {
     if (!mediaSource || mediaSource.readyState < 2 || (!this.motion.roi && !this.prepareRoi())) return;
     const g = this.motion.grab(mediaSource), m = this.cfg.motion;
     const ratio = this.prev ? this.motion.diff(g, this.prev).ratio : 0;
+    const refRatio = this.reference ? this.motion.diff(g, this.reference).ratio : 0;
+    if ((this.debugTick = (this.debugTick || 0) + 1) % 3 === 0) {
+      const stateEl = document.getElementById('debug-state'), diffEl = document.getElementById('debug-diff');
+      if (stateEl) stateEl.textContent = `Status: ${this.state === 'armed' ? 'bereit' : this.state === 'moving' ? 'Bewegung / Schatten prüfen' : this.state === 'busy' ? 'Bild wird geprüft' : this.state}`;
+      if (diffEl) diffEl.textContent = `Änderung: ${(ratio * 100).toFixed(2)} % · Board: ${(refRatio * 100).toFixed(2)} %`;
+    }
     this.prev = g;
     switch (this.state) {
       case 'init':
@@ -1932,8 +1952,7 @@ class AutoDartsEngine {
         break;
       case 'armed': {
         // Bewegung zwischen zwei Bildern ODER schleichende Änderung gegenüber der Referenz (kleiner Dart, der ruhig einschlägt)
-        const dr = this.reference ? this.motion.diff(g, this.reference).ratio : 0;
-        if (ratio > m.startRatio || dr > m.refRatio) { this.state = 'moving'; this.still = 0; if (!this.turnComplete) this.setStatus('Bewegung …'); }
+        if (ratio > m.startRatio || refRatio > m.refRatio) { this.state = 'moving'; this.still = 0; if (!this.turnComplete) this.setStatus('Bewegung …'); }
         break;
       }
       case 'moving':
@@ -1992,7 +2011,22 @@ class AutoDartsEngine {
 
   async settled(g) {
     this.state = 'busy';
-    const m = this.cfg.motion, tn = this.cfg.turn, cur = this.motion.grabFull(this.video);
+    const m = this.cfg.motion, tn = this.cfg.turn;
+    let cur = this.motion.grabFull(this.video);
+    // Mehrere stabile Bilder mitteln: kurze Schatten-/Belichtungsflackern sollen keinen Dart vortäuschen.
+    await new Promise(resolve => setTimeout(resolve, 80));
+    const g1 = this.motion.grab(this.video), cur1 = this.motion.grabFull(this.video);
+    await new Promise(resolve => setTimeout(resolve, 80));
+    const g2 = this.motion.grab(this.video), cur2 = this.motion.grabFull(this.video);
+    const median3 = (a, b, c) => {
+      const out = new Uint8Array(a.length);
+      for (let i = 0; i < a.length; i++) out[i] = Math.max(Math.min(a[i], b[i]), Math.min(Math.max(a[i], b[i]), c[i]));
+      return out;
+    };
+    g = median3(g, g1, g2);
+    if (cur.w === cur1.w && cur.w === cur2.w && cur.h === cur1.h && cur.h === cur2.h) {
+      cur = { g: median3(cur.g, cur1.g, cur2.g), w: cur.w, h: cur.h };
+    }
     const d = this.motion.diff(g, this.reference);
 
     if (d.ratio > m.maxChangeRatio) {                                          // Hand im Bild: abwarten, Referenz nicht anfassen
@@ -2225,6 +2259,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     const initPeerConnection = async () => {
       const code = generateCode();
+      document.querySelector('.stream-code-box').hidden = false;
       $('pairing-code').textContent = code;
       
       const qrContainer = $('qrcode');
@@ -2240,6 +2275,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (receiver) receiver.stop();
         receiver = new StreamReceiver(deps, code, stream => {
           controlsBar.style.display = 'none';
+          document.querySelector('.stream-code-box').hidden = true;
           engine.loadRemoteStream(stream);
         }, msg => statusEl.textContent = msg);
         receiver.start();
@@ -2261,7 +2297,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     $('btn-reset').addEventListener('click', async () => { engine.clearCalibration(); engine.showGrid(false); syncDot(); await engine.calibrate(); });
     $('btn-manual').addEventListener('click', () => engine.calibrate());
     $('btn-auto').addEventListener('click', () => engine.autoCalibrate());
-    $('btn-ref').addEventListener('click', () => engine.newTurn());
     $('btn-grid').addEventListener('click', () => { gridOn = !gridOn; engine.showGrid(gridOn); });
 
 
