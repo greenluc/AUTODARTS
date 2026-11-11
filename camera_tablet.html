@@ -297,6 +297,10 @@
         .ico { width:1.1em; height:1.1em; vertical-align:-0.2em; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; margin-right:.4em; }
         .ico.fill { fill:currentColor; stroke:none; }
         .turn-hud { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-top:12px; padding:10px 14px; border-radius:14px; background:rgba(255,255,255,.05); border:1px solid var(--glass-border); font-weight:600; }
+        .accuracy-panel { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-top:10px; padding:10px 14px; border:1px solid var(--glass-border); border-radius:12px; background:rgba(0,0,0,.24); font-size:.86rem; }
+        .accuracy-panel strong { color:var(--accent); }
+        .accuracy-panel small { color:var(--text-gray); }
+        .accuracy-panel button { margin-left:auto; }
         .pips { display:inline-flex; gap:7px; }
         .dart-pip { width:14px; height:14px; border-radius:50%; border:2px solid rgba(255,255,255,.35); display:inline-block; }
         .dart-pip.on { background:#ff2d2d; border-color:#fff; }
@@ -380,6 +384,7 @@
 
 
             <div class="turn-hud"><span class="pips" id="turn-pips"></span><span id="turn-text">Bereit – Darts werfen</span></div>
+            <div class="accuracy-panel" aria-live="polite"><strong>Erkennungsquote: <span id="accuracy-percent">—</span></strong><span id="accuracy-counts">Noch keine Würfe bewertet</span><small>Nur deine Bewertungen zählen.</small><button class="btn-action" id="accuracy-reset" type="button">Zurücksetzen</button></div>
             <div class="mark-opts">
                 <label><input type="checkbox" id="mk-tip"> Dartspitze (roter Punkt)</label>
                 <label><input type="checkbox" id="mk-flight"> Flight markieren</label>
@@ -495,7 +500,7 @@ const DEFAULTS = {
   autoLevel: 3,                  // Auto-Kalibrierung: 1 (minimal) … 5 (maximal)
   turn: { darts: 3, emptyRatio: 0.006 },   // Leere Boardfläche nach dem Herausziehen automatisch erkennen
   marks: { tip: true, flight: true, label: true },   // Markierungen: Spitze (roter Punkt), Flight (blauer Ring), Beschriftung
-  feedbackMs: 3000,
+  feedbackMs: 7000,
   onHit: null,
 };
 
@@ -1174,7 +1179,7 @@ function injectCss() {
 .adv-btn:disabled{opacity:.4}.adv-btn.adv-ok{background:#16a34a}.adv-btn.adv-sel{background:#f59e0b;color:#000}
 .adv-pop{position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:99999;width:min(94vw,420px);background:#111827;color:#fff;border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,.5);font:15px system-ui,sans-serif;overflow:hidden}
 .adv-pop[hidden]{display:none}
-.adv-pop-main{display:flex;align-items:center;gap:8px;padding:12px}
+.adv-pop-main{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:12px}
 .adv-pop-label{flex:1;font-weight:700;font-size:18px}.adv-pop-pts{opacity:.7;margin-right:4px}
 .adv-pop-bar{height:4px;background:#1f2937}.adv-pop-bar i{display:block;height:100%;width:100%;background:#22c55e;transform-origin:left;animation:advbar linear forwards}
 @keyframes advbar{from{transform:scaleX(1)}to{transform:scaleX(0)}}
@@ -1422,6 +1427,14 @@ class MotionDetector {
     }
     return out.sort((a, b) => b.length - a.length);
   }
+  dartLike(blob) {
+    if (!blob || blob.length < 4) return false;
+    let x0 = this.w, y0 = this.h, x1 = -1, y1 = -1;
+    for (const p of blob) { const x = p % this.w, y = (p / this.w) | 0; x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+    const bw = x1 - x0 + 1, bh = y1 - y0 + 1, longSide = Math.max(bw, bh), shortSide = Math.max(1, Math.min(bw, bh));
+    // Ein echter Dart erzeugt meist eine längliche Änderung; kleine, kompakte Schatten-/Rauschflecken ignorieren.
+    return longSide >= 5 && longSide / shortSide >= 1.35 && blob.length >= Math.max(4, this.cfg.minBlobPixels);
+  }
 }
 
 /* ============================== Dartspitze + Flight aus der Differenz zweier Vollbilder ==============================
@@ -1594,7 +1607,7 @@ class ScoreFeedback {
     this.root = el('div', 'adv-pop'); this.root.hidden = true;
     this.root.innerHTML = `
       <div class="adv-pop-main"><span class="adv-pop-label"></span><span class="adv-pop-pts"></span>
-        <button class="adv-btn adv-ok" data-a="ok">${ICON.check}</button><button class="adv-btn" data-a="fix">Korrigieren</button></div>
+        <button class="adv-btn adv-ok" data-a="right">Richtig</button><button class="adv-btn" data-a="wrong">Falsch</button><button class="adv-btn" data-a="voice">Sprechen</button><button class="adv-btn" data-a="fix">Korrigieren</button></div>
       <div class="adv-pop-bar"><i></i></div>
       <div class="adv-pop-fix" hidden>
         <div class="adv-row adv-mult"></div><div class="adv-row adv-seg"></div>
@@ -1609,9 +1622,9 @@ class ScoreFeedback {
     this.root.addEventListener('click', e => this.click(e));
   }
 
-  show(res, cb) {
+  show(res, cb, onVerify) {
     this.commit();
-    this.cur = { res, cb }; this.sel = { s: res.segment, m: res.multiplier };
+    this.cur = { res, cb, onVerify }; this.sel = { s: res.segment, m: res.multiplier };
     this.lbl.textContent = `${res.label} erkannt` + (res.unsure ? ' (unsicher)' : ''); this.pts.textContent = `${res.points} Pkt`;
     this.fix.hidden = true; this.root.hidden = false; this.restartBar();
     clearTimeout(this.timer); this.timer = setTimeout(() => this.commit(), this.ms);
@@ -1622,7 +1635,9 @@ class ScoreFeedback {
   click(e) {
     const b = e.target.closest('button'); if (!b || !this.cur) return;
     const a = b.dataset.a;
-    if (a === 'ok') return this.commit();
+    if (a === 'right') return this.commit(true);
+    if (a === 'wrong') return this.commit(false);
+    if (a === 'voice') return this.listenForVerdict();
     if (a === 'fix') { clearTimeout(this.timer); this.bar.hidden = true; this.fix.hidden = false; this.paint(); return; }
     if (a === 'back') { this.fix.hidden = true; this.restartBar(); clearTimeout(this.timer); this.timer = setTimeout(() => this.commit(), this.ms); return; }
     if (a === 'apply') {
@@ -1632,7 +1647,7 @@ class ScoreFeedback {
         board: old.board, cam: old.cam, confidence: old.confidence, source: old.source, dartId: old.dartId, flight: old.flight,
         corrected: true, original: old.corrected ? old.original : old.label,
       });
-      return this.commit();
+      return this.commit(false);
     }
     if (b.dataset.m) this.sel.m = +b.dataset.m;
     if (b.dataset.s) this.sel.s = +b.dataset.s;
@@ -1645,10 +1660,25 @@ class ScoreFeedback {
     this.seg.querySelectorAll('button').forEach(x => x.classList.toggle('adv-sel', +x.dataset.s === s));
   }
 
-  commit() {
+  listenForVerdict() {
+    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!Recognition) { this.lbl.textContent = 'Spracherkennung hier nicht verfügbar – bitte Richtig/Falsch antippen'; return; }
+    const rec = new Recognition(); rec.lang = 'de-DE'; rec.interimResults = false; rec.maxAlternatives = 1;
+    this.lbl.textContent = 'Sag jetzt „richtig“ oder „falsch“…';
+    rec.onresult = event => {
+      const heard = (event.results?.[0]?.[0]?.transcript || '').toLowerCase();
+      if (heard.includes('falsch') || heard.includes('nein')) this.commit(false);
+      else if (heard.includes('richtig') || heard.includes('ja')) this.commit(true);
+      else this.lbl.textContent = `Nicht erkannt („${heard}“) – bitte erneut sprechen oder tippen`;
+    };
+    rec.onerror = () => { if (this.cur) this.lbl.textContent = 'Spracheingabe fehlgeschlagen – bitte Richtig/Falsch tippen'; };
+    try { rec.start(); } catch (_) { this.lbl.textContent = 'Mikrofon nicht bereit – bitte Richtig/Falsch tippen'; }
+  }
+
+  commit(verdict = null) {
     clearTimeout(this.timer);
     const c = this.cur; this.cur = null; this.root.hidden = true;
-    if (c) c.cb(c.res);
+    if (c) { if (verdict !== null && c.onVerify) c.onVerify(verdict); c.cb(c.res); }
   }
 
   destroy() { clearTimeout(this.timer); this.root.remove(); }
@@ -2036,7 +2066,7 @@ class AutoDartsEngine {
       const e = this.motion.diff(g, this.emptyRef);
       if (e.ratio < tn.emptyRatio) { this.endTurn(g, cur, 'removed'); return; }
     }
-    const blobs = this.motion.blobs(d.mask);
+    const blobs = this.motion.blobs(d.mask).filter(blob => this.motion.dartLike(blob));
     if (!blobs.length) { this.reference = g; this.refFull = cur; this.state = 'armed'; this.setStatus(this.turnComplete ? 'Aufnahme beendet – bitte Darts ziehen' : 'Bereit'); return; }
 
     if (this.turnDarts.length && this.isRemoval(blobs[0], g)) {                // einzelner Dart herausgezogen
@@ -2068,7 +2098,7 @@ class AutoDartsEngine {
     if (loc.frontal) console.log('[Erkennung] Kamera schaut fast senkrecht aufs Board (Blickwinkel unter 20°) – die Spitze ist verdeckt und unsicher. Kamera seitlich/unten stellen (ab ca. 25–30°) verbessert die Genauigkeit.');
     this.emitTurn();
     this.emit('throw', res);
-    this.feedback.show(res, final => this.submit(final));
+    this.feedback.show(res, final => this.submit(final), verdict => this.emit('verification', { verdict, res }));
   }
 
   submit(res) {
@@ -2194,6 +2224,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     const $ = id => document.getElementById(id);
     const dot = $('status-dot'), statusEl = $('calibration-status'), list = $('throw-list'), totalEl = $('throw-total');
     let total = 0, gridOn = true, turnSum = 0;
+    const ACC_KEY = 'dartly_detection_accuracy_v1';
+    let accuracy = { correct: 0, incorrect: 0 };
+    try { accuracy = { ...accuracy, ...JSON.parse(localStorage.getItem(ACC_KEY) || '{}') }; } catch (_) {}
+    const paintAccuracy = () => {
+        const judged = accuracy.correct + accuracy.incorrect;
+        $('accuracy-percent').textContent = judged ? `${Math.round(100 * accuracy.correct / judged)} %` : '—';
+        $('accuracy-counts').textContent = judged ? `Richtig ${accuracy.correct} · Falsch ${accuracy.incorrect} · bewertet ${judged}` : 'Noch keine Würfe bewertet';
+    };
+    paintAccuracy();
 
     const engine = new AutoDartsEngine({
         container: document.querySelector('.camera-wrapper'),
@@ -2207,6 +2246,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
     window.dartEngine = engine;
     await engine.start();
+    engine.on('verification', ({ verdict }) => {
+        accuracy[verdict ? 'correct' : 'incorrect']++;
+        localStorage.setItem(ACC_KEY, JSON.stringify(accuracy));
+        paintAccuracy();
+    });
+    $('accuracy-reset').addEventListener('click', () => {
+        accuracy = { correct: 0, incorrect: 0 };
+        localStorage.setItem(ACC_KEY, JSON.stringify(accuracy));
+        paintAccuracy();
+    });
 
     // Video Player Controls Logic
     const vidEl = $('webcam');
