@@ -170,21 +170,23 @@
         .camera-wrapper {
             position: relative;
             width: 100%;
+            aspect-ratio: 1 / 1;
             background: #000;
-            border-radius: 14px;
+            border-radius: 0;
             overflow: hidden;
-            border: 1px solid var(--glass-border);
+            border: 0;
             display: flex;
             align-items: center;
             justify-content: center;
-            min-height: 300px;
+            min-height: 0;
         }
 
         video#webcam, img#screenshot-preview {
             display: block;
             width: 100%;
             height: auto;
-            object-fit: fill;
+            object-fit: contain;
+            box-shadow: none;
         }
 
         /* Video Controls Overlay für Sequenz-Analyse */
@@ -1346,6 +1348,7 @@ class MotionDetector {
   constructor(cfg) { this.cfg = cfg; this.cvs = document.createElement('canvas'); this.ctx = this.cvs.getContext('2d', { willReadFrequently: true }); this.roi = null; }
 
   grab(mediaEl) {
+    if (!this.ctx || !mediaEl) throw new Error('Kamerabild oder Canvas-Kontext nicht verfügbar.');
     const w = this.cfg.width, srcW = mediaEl.videoWidth || mediaEl.naturalWidth || 1280;
     const srcH = mediaEl.videoHeight || mediaEl.naturalHeight || 720;
     const h = Math.round(w * srcH / srcW);
@@ -1358,9 +1361,11 @@ class MotionDetector {
 
   /** Graustufen in Vollauflösung (max. 1920 px breit) für die Spitzenerkennung */
   grabFull(mediaEl) {
+    if (!mediaEl) throw new Error('Kein Kamerabild verfügbar.');
     const srcW = mediaEl.videoWidth || mediaEl.naturalWidth || 1280, srcH = mediaEl.videoHeight || mediaEl.naturalHeight || 720;
     const sc = Math.min(1, 1920 / srcW), w = Math.round(srcW * sc), h = Math.round(srcH * sc);
     if (!this._fc) { this._fc = document.createElement('canvas'); this._fx = this._fc.getContext('2d', { willReadFrequently: true }); }
+    if (!this._fx) throw new Error('Canvas-Kontext für die Spitzenerkennung nicht verfügbar.');
     if (this._fc.width !== w || this._fc.height !== h) { this._fc.width = w; this._fc.height = h; }
     this._fx.drawImage(mediaEl, 0, 0, w, h);
     const d = this._fx.getImageData(0, 0, w, h).data, g = new Uint8Array(w * h);
@@ -1677,6 +1682,7 @@ class AutoDartsEngine {
   /** Video/Stream hat Maße: gespeicherte Kalibrierung laden und Erkennung starten */
   onMedia() {
     if (this.isScreenshotMode) return;
+    if (!this.video || !this.video.videoWidth || !this.video.videoHeight) { this.setStatus('Warte auf gültiges Kamerabild …'); return; }
     this.stopDetection(); this.resetTurnState();
     this.camSize = { w: this.video.videoWidth, h: this.video.videoHeight };
     this.H = this.Hinv = null; this.motion.roi = null;
