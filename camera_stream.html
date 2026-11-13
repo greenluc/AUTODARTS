@@ -13,7 +13,7 @@
   h1 { font-size:1.5rem; margin:6px 0 2px; letter-spacing:.5px; } .sub { color:var(--gray); font-size:.8rem; letter-spacing:2px; margin:0 0 14px; }
   .card { width:100%; max-width:480px; background:var(--card); border:1px solid rgba(255,255,255,.08); border-radius:20px; padding:20px; margin-bottom:14px; }
   label { display:block; font-size:.8rem; color:var(--gray); margin-bottom:6px; }
-  input { width:100%; font-size:2rem; letter-spacing:.35em; text-align:center; padding:12px; border-radius:12px; border:1px solid rgba(255,255,255,.15); background:rgba(255,255,255,.06); color:#fff; font-weight:700; }
+  input[type="text"], input:not([type]) { width:100%; font-size:2rem; letter-spacing:.35em; text-align:center; padding:12px; border-radius:12px; border:1px solid rgba(255,255,255,.15); background:rgba(255,255,255,.06); color:#fff; font-weight:700; }
   button { border:0; border-radius:12px; padding:13px 16px; font-size:1rem; font-weight:700; cursor:pointer; background:#2d3550; color:#fff; }
   button.primary { background:var(--accent); color:#00331c; width:100%; margin-top:14px; font-size:1.1rem; }
   button.secondary { background:rgba(255,255,255,0.1); width:100%; margin-top:8px; font-size:0.95rem; }
@@ -32,6 +32,15 @@
   [hidden] { display:none !important; }
   .ico { width:1.1em; height:1.1em; vertical-align:-0.2em; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; margin-right:.4em; }
   .ico.fill { fill:currentColor; stroke:none; }
+
+  /* Zoom-Steuerung Styling */
+  .zoom-box { margin-top:14px; padding:12px; border-radius:12px; background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.08); }
+  .zoom-header { display:flex; justify-content:space-between; align-items:center; font-size:.85rem; color:var(--gray); margin-bottom:8px; }
+  .zoom-val { color:var(--accent); font-weight:700; font-size:.95rem; }
+  .zoom-controls { display:flex; align-items:center; gap:10px; }
+  .zoom-btn { width:40px; height:40px; padding:0; display:flex; align-items:center; justify-content:center; font-size:1.3rem; border-radius:10px; background:rgba(255,255,255,.12); flex-shrink:0; }
+  .zoom-btn:active { background:var(--accent); color:#00331c; }
+  input[type="range"] { flex:1; accent-color:var(--accent); height:6px; background:rgba(255,255,255,.15); border-radius:5px; outline:none; cursor:pointer; }
 </style>
 </head>
 <body>
@@ -62,6 +71,20 @@
       <span class="chip"><span class="dot" id="dot"></span><span id="status">Starte …</span></span>
       <span class="chip" id="awake"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M5 19l1.5-1.5M17.5 6.5L19 5"/></svg>Display an</span>
     </div>
+
+    <!-- Zoom-Steuerung -->
+    <div class="zoom-box" id="zoom-box" hidden>
+      <div class="zoom-header">
+        <span>Kamera-Zoom</span>
+        <span class="zoom-val" id="zoom-val">1.0×</span>
+      </div>
+      <div class="zoom-controls">
+        <button type="button" class="zoom-btn" id="zoom-out" title="Rauszoomen">−</button>
+        <input type="range" id="zoom-slider" min="1" max="5" step="0.1" value="1">
+        <button type="button" class="zoom-btn" id="zoom-in" title="Reinzoomen">+</button>
+      </div>
+    </div>
+
     <div class="stats" id="stats"></div>
     <div class="row">
       <button id="dimBtn">Bildschirm abdunkeln</button>
@@ -115,6 +138,62 @@ function adopt(stream) {
   S.stream = stream; 
   S.track = stream.getVideoTracks()[0]; 
   $('preview').srcObject = stream;
+  setupZoom();
+}
+
+// Zoom-Funktionen initialisieren und anwenden
+function setupZoom() {
+  const box = $('zoom-box');
+  if (!S.track || typeof S.track.getCapabilities !== 'function') {
+    box.hidden = true;
+    return;
+  }
+
+  const caps = S.track.getCapabilities();
+  if (!caps.zoom) {
+    // Gerät/Browser unterstützt nativen Kamera-Zoom nicht
+    box.hidden = true;
+    return;
+  }
+
+  const min = caps.zoom.min || 1;
+  const max = caps.zoom.max || 5;
+  const step = caps.zoom.step || 0.1;
+
+  const slider = $('zoom-slider');
+  slider.min = min;
+  slider.max = max;
+  slider.step = step;
+
+  // Gespeicherten Zoom-Wert wiederherstellen oder auf Standard setzen
+  const savedZoom = parseFloat(store.get('dartly_cam_zoom'));
+  const currentSettings = S.track.getSettings();
+  let initialZoom = currentSettings.zoom || min;
+
+  if (!isNaN(savedZoom) && savedZoom >= min && savedZoom <= max) {
+    initialZoom = savedZoom;
+  }
+
+  slider.value = initialZoom;
+  applyZoom(initialZoom);
+  box.hidden = false;
+}
+
+async function applyZoom(val) {
+  if (!S.track) return;
+  const slider = $('zoom-slider');
+  const min = parseFloat(slider.min);
+  const max = parseFloat(slider.max);
+  const clamped = Math.min(max, Math.max(min, val));
+
+  try {
+    await S.track.applyConstraints({ advanced: [{ zoom: clamped }] });
+    slider.value = clamped;
+    $('zoom-val').textContent = clamped.toFixed(1) + '×';
+    store.set('dartly_cam_zoom', clamped);
+  } catch (e) {
+    console.warn('Zoom konnte nicht gesetzt werden:', e);
+  }
 }
 
 async function outStats() {
@@ -184,7 +263,6 @@ async function setupWebRTC(cleanCode) {
     const data = snapshot.data();
     if (!data) return;
 
-    // Sobald das Tablet eine Answer schickt
     if (data.answer && !pc.currentRemoteDescription) {
       try {
         const answerObj = JSON.parse(data.answer);
@@ -200,7 +278,6 @@ async function setupWebRTC(cleanCode) {
       }
     }
 
-    // Hub ICE Kandidaten empfangen
     if (data.hubIceCandidates && Array.isArray(data.hubIceCandidates)) {
       for (const candidateStr of data.hubIceCandidates) {
         if (!cameraProcessedCandidates.has(candidateStr)) {
@@ -232,7 +309,6 @@ async function start() {
     store.set('dartly_stream_auto', '1');
     setStatus('Verbinde mit Tablet …', ''); 
     
-    // Wake Lock aktivieren, damit das Handy nicht abdunkelt
     try {
       if (navigator.wakeLock) S.wake = await navigator.wakeLock.request('screen');
     } catch (_) {}
@@ -299,6 +375,19 @@ async function stopScanner() {
   }
   $('scanner-modal').hidden = true;
 }
+
+// Event-Listener für Zoom-Slider und Buttons
+$('zoom-slider').addEventListener('input', (e) => applyZoom(parseFloat(e.target.value)));
+$('zoom-in').addEventListener('click', () => {
+  const slider = $('zoom-slider');
+  const step = Math.max(0.2, parseFloat(slider.step));
+  applyZoom(parseFloat(slider.value) + step);
+});
+$('zoom-out').addEventListener('click', () => {
+  const slider = $('zoom-slider');
+  const step = Math.max(0.2, parseFloat(slider.step));
+  applyZoom(parseFloat(slider.value) - step);
+});
 
 $('code').value = (params.get('code') || store.get('dartly_stream_code') || '').replace(/\D/g, '').slice(0, 6);
 $('start').addEventListener('click', start);
