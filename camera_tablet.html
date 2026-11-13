@@ -170,21 +170,35 @@
         .camera-wrapper {
             position: relative;
             width: 100%;
+            aspect-ratio: 1 / 1;
             background: #000;
-            border-radius: 14px;
+            border-radius: 0;
             overflow: hidden;
-            border: 1px solid var(--glass-border);
+            border: 0;
             display: flex;
             align-items: center;
             justify-content: center;
-            min-height: 300px;
+            min-height: 0;
         }
+        .detection-debug {
+            position: absolute; z-index: 20; top: 8px; right: 8px; width: min(210px, 58%);
+            padding: 8px 10px; border: 1px solid rgba(255,255,255,.18); border-radius: 9px;
+            background: rgba(5,8,12,.82); color: #fff; font: 11px/1.4 system-ui,sans-serif;
+            pointer-events: none; backdrop-filter: blur(4px);
+        }
+        .detection-debug strong { display:block; color:#00ff88; font-size:11px; margin-bottom:2px; }
+        .detection-debug canvas { display:block; width:100%; height:auto; margin:5px 0; border:1px solid rgba(255,255,255,.18); image-rendering:pixelated; }
+        .diff-meter { position:relative; height:6px; margin:7px 0 2px; border-radius:5px; background:rgba(255,255,255,.14); overflow:visible; }
+        .diff-meter i { display:block; height:100%; width:0; border-radius:5px; background:#00ff88; }
+        .diff-meter b { position:absolute; top:-2px; width:2px; height:10px; background:#fff; transform:translateX(-50%); }
+        .diff-legend { display:flex; justify-content:space-between; color:rgba(255,255,255,.72); font-size:9px; }
 
         video#webcam, img#screenshot-preview {
             display: block;
             width: 100%;
-            height: auto;
-            object-fit: fill;
+            height: 100%;
+            object-fit: contain;
+            box-shadow: none;
         }
 
         /* Video Controls Overlay für Sequenz-Analyse */
@@ -288,6 +302,14 @@
         .ico { width:1.1em; height:1.1em; vertical-align:-0.2em; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; margin-right:.4em; }
         .ico.fill { fill:currentColor; stroke:none; }
         .turn-hud { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-top:12px; padding:10px 14px; border-radius:14px; background:rgba(255,255,255,.05); border:1px solid var(--glass-border); font-weight:600; }
+        .accuracy-panel { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-top:10px; padding:10px 14px; border:1px solid var(--glass-border); border-radius:12px; background:rgba(0,0,0,.24); font-size:.86rem; }
+        .accuracy-panel strong { color:var(--accent); }
+        .accuracy-panel small { color:var(--text-gray); }
+        .accuracy-panel #accuracy-reset { margin-left:auto; }
+        .accuracy-panel #training-export { margin-left:0; }
+        .advanced-options { margin-top:12px; border:1px solid var(--glass-border); border-radius:12px; background:rgba(0,0,0,.16); }
+        .advanced-options summary { padding:10px 14px; cursor:pointer; color:var(--text-gray); font-weight:600; }
+        .advanced-options[open] { padding:0 12px 12px; }
         .pips { display:inline-flex; gap:7px; }
         .dart-pip { width:14px; height:14px; border-radius:50%; border:2px solid rgba(255,255,255,.35); display:inline-block; }
         .dart-pip.on { background:#ff2d2d; border-color:#fff; }
@@ -338,6 +360,15 @@
             <!-- Kamera & Video Viewport -->
             <div class="camera-wrapper">
                 <video id="webcam" autoplay playsinline muted></video>
+                <div class="detection-debug" id="detection-debug" hidden>
+                    <strong>Differenzbild · Live</strong>
+                    <canvas id="diff-preview" width="160" height="90" aria-label="Live-Differenzbild; grün markiert geänderte Pixel"></canvas>
+                    <small>Grün = geänderte Bildpunkte</small>
+                    <span id="debug-state">Warte auf Bild</span><br><span id="debug-diff">Änderung: —</span>
+                    <div class="diff-meter" aria-hidden="true"><i id="diff-meter-fill"></i><b style="left:25%"></b><b style="left:60%;background:#ffb454"></b></div>
+                    <div class="diff-legend"><span>0 %</span><span>5 %</span><span>12 %</span><span>20 %</span></div>
+                    <small>5 % Orientierung · Handfilter ab 12 %</small>
+                </div>
                 <input type="file" id="video-upload-input" accept="video/*" style="display: none;">
                 <input type="file" id="image-upload-input" accept="image/*" style="display: none;">
             </div>
@@ -358,10 +389,8 @@
                     <span id="calibration-status">Initialisiere...</span>
                 </div>
                 <div class="btn-group">
-                    <button class="btn-action" id="btn-ref">Darts gezogen</button>
-                    <button class="btn-action" id="btn-grid">Raster</button>
-                    <button class="btn-action" id="btn-auto" style="background: rgba(0,255,136,0.15); border-color: rgba(0,255,136,0.4);"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>Auto-Erkennung</button>
-                    <button class="btn-action" id="btn-manual">15-Punkte Kalibrierung</button>
+                    <button class="btn-action" id="btn-auto" style="background: rgba(0,255,136,0.15); border-color: rgba(0,255,136,0.4);"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>Auto-Kalibrierung</button>
+                    <button class="btn-action" id="btn-manual">19-Punkte-Raster</button>
                     <button class="btn-action" id="btn-upload-vid" style="background: rgba(0,150,255,0.2); border-color: rgba(0,150,255,0.4);"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4"/></svg>Video analysieren</button>
                     <button class="btn-action" id="btn-upload-img" style="background: rgba(255,170,0,0.15); border-color: rgba(255,170,0,0.45);"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.8"/><path d="M21 16l-5-5-8 8"/></svg>Screenshot laden</button>
                     <button class="btn-action" id="btn-live" hidden><svg class="ico" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>Zurück zur Live-Ansicht</button>
@@ -371,17 +400,22 @@
 
 
             <div class="turn-hud"><span class="pips" id="turn-pips"></span><span id="turn-text">Bereit – Darts werfen</span></div>
-            <div class="mark-opts">
-                <label><input type="checkbox" id="mk-tip"> Dartspitze (roter Punkt)</label>
-                <label><input type="checkbox" id="mk-flight"> Flight markieren</label>
-                <label><input type="checkbox" id="mk-label"> Beschriftung</label>
-            </div>
-            <div class="level-row">
-                <div class="level-head"><span><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>Auto-Genauigkeit</span><b id="auto-level-name">Standard</b></div>
-                <input type="range" id="auto-level" min="1" max="5" step="1" value="3">
-                <div class="level-scale"><span>Minimal</span><span>Maximal</span></div>
-                <div class="level-hint" id="auto-level-hint"></div>
-            </div>
+            <div class="accuracy-panel" aria-live="polite"><strong>Erkennungsquote: <span id="accuracy-percent">—</span></strong><span id="accuracy-counts">Noch keine Würfe bewertet</span><small>Nur deine Bewertungen zählen.</small><span id="training-count">0 Trainingsbilder · lokal gespeichert</span><button class="btn-action" id="accuracy-reset" type="button">Quote zurücksetzen</button><button class="btn-action" id="training-export" type="button">Trainingsdaten exportieren</button></div>
+            <details class="advanced-options">
+                <summary>Erweiterte Anzeige- und Erkennungsoptionen</summary>
+                <button class="btn-action" id="btn-grid" type="button">Kalibrierungsraster ein-/ausblenden</button>
+                <div class="mark-opts">
+                    <label><input type="checkbox" id="mk-tip"> Dartspitze (roter Punkt)</label>
+                    <label><input type="checkbox" id="mk-flight"> Flight markieren</label>
+                    <label><input type="checkbox" id="mk-label"> Beschriftung</label>
+                </div>
+                <div class="level-row">
+                    <div class="level-head"><span><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>Auto-Genauigkeit</span><b id="auto-level-name">Standard</b></div>
+                    <input type="range" id="auto-level" min="1" max="5" step="1" value="3">
+                    <div class="level-scale"><span>Minimal</span><span>Maximal</span></div>
+                    <div class="level-hint" id="auto-level-hint"></div>
+                </div>
+            </details>
 
             <p class="info-box">
                 Empfange das Live-Bild via P2P vom Handy, lade einen Screenshot oder ein Aufnahme-Video hoch, stoppe es an der Stelle, an der die Darts stecken, und kalibriere/analysiere sie präzise.
@@ -443,7 +477,7 @@
 </script>
 
 <script>
-const LS_KEY = 'dartly_camera_homography_11pt';
+const LS_KEY = 'dartly_camera_homography_19pt_fit_v2';
 const BOARD = { size: 200, cx: 100, cy: 100, rOuter: 91 };
 const SECTOR_ORDER = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5];
 const BOARD_MM = { bullseye: 6.35, singleBull: 15.9, tripleInner: 99, tripleOuter: 107, doubleInner: 162, doubleOuter: 170 };
@@ -462,15 +496,15 @@ const DEFAULTS = {
   opencvUrl: 'https://docs.opencv.org/4.x/opencv.js',
   radii: DEFAULT_RADII,
   motion: {
-    width: 160,
-    fps: 15,
-    pixelThreshold: 18,
-    startRatio: 0.004,
-    refRatio: 0.0012,            // Änderung gegenüber der Referenz, ab der geprüft wird (kleine, ruhig einschlagende Darts)
-    stillRatio: 0.0015,
-    stillFrames: 6,
-    maxChangeRatio: 0.12,
-    minBlobPixels: 3,
+    width: 277, // ca. 3x Gesamtpixelzahl gegenüber 160px Arbeitsbreite
+    fps: 5,
+    pixelThreshold: 8,
+    startRatio: 0.0007,
+    refRatio: 0.00025,            // Änderung gegenüber der Referenz, ab der geprüft wird (kleine, ruhig einschlagende Darts)
+    stillRatio: 0.00045,
+    stillFrames: 3,
+    maxChangeRatio: 0.25,
+    minBlobPixels: 2,
     roiRadius: 125,
     maxScoreRadius: 115,
   },
@@ -484,36 +518,48 @@ const DEFAULTS = {
   },
   targetMm: 0.2,
   autoLevel: 3,                  // Auto-Kalibrierung: 1 (minimal) … 5 (maximal)
-  turn: { darts: 3, emptyRatio: 0.004 },   // Darts je Aufnahme; darunter gilt das Board als leer (Darts gezogen)
+  turn: { darts: 3, emptyRatio: 0.006 },   // Leere Boardfläche nach dem Herausziehen automatisch erkennen
   marks: { tip: true, flight: true, label: true },   // Markierungen: Spitze (roter Punkt), Flight (blauer Ring), Beschriftung
-  feedbackMs: 3000,
+  feedbackMs: 7000,
   onHit: null,
 };
 
 const ANCHOR_DEFINITIONS = [
   { deg: null, label: 'Punkt 1: Bullseye (Zentrum)', isCenter: true },
-  { deg: 9,   label: 'Punkt 2: Doppelring außen, Draht 20 | 1 (oben)' },
-  { deg: 45,  label: 'Punkt 3: Doppelring außen, Draht 18 | 4 (oben rechts)' },
-  { deg: 81,  label: 'Punkt 4: Doppelring außen, Draht 6 | 13 (rechts)' },
-  { deg: 117, label: 'Punkt 5: Doppelring außen, Draht 10 | 15 (unten rechts)' },
-  { deg: 153, label: 'Punkt 6: Doppelring außen, Draht 2 | 17 (unten rechts)' },
-  { deg: 189, label: 'Punkt 7: Doppelring außen, Draht 3 | 19 (unten)' },
-  { deg: 225, label: 'Punkt 8: Doppelring außen, Draht 7 | 16 (unten links)' },
-  { deg: 261, label: 'Punkt 9: Doppelring außen, Draht 8 | 11 (links)' },
-  { deg: 297, label: 'Punkt 10: Doppelring außen, Draht 14 | 9 (oben links)' },
-  { deg: 333, label: 'Punkt 11: Doppelring außen, Draht 12 | 5 (oben links)' },
-  { deg: 27,  ring: 'triple', label: 'Punkt 12: Triple-Ring außen, Draht 1 | 18 (oben rechts)' },
-  { deg: 117, ring: 'triple', label: 'Punkt 13: Triple-Ring außen, Draht 10 | 15 (unten rechts)' },
-  { deg: 207, ring: 'triple', label: 'Punkt 14: Triple-Ring außen, Draht 19 | 7 (unten links)' },
-  { deg: 297, ring: 'triple', label: 'Punkt 15: Triple-Ring außen, Draht 14 | 9 (oben links)' },
+  { deg: 9, ring: 'singleBull', label: 'Punkt 2: Außenkante Single Bull (Radius)' },
+  { deg: 9, ring: 'double', label: 'Punkt 3: Doppelring außen, Draht 20 | 1 (oben)' },
+  { deg: 45, ring: 'double', label: 'Punkt 4: Doppelring außen, Draht 18 | 4 (oben rechts)' },
+  { deg: 81, ring: 'double', label: 'Punkt 5: Doppelring außen, Draht 6 | 13 (rechts)' },
+  { deg: 117, ring: 'double', label: 'Punkt 6: Doppelring außen, Draht 10 | 15 (unten rechts)' },
+  { deg: 153, ring: 'double', label: 'Punkt 7: Doppelring außen, Draht 2 | 17 (unten rechts)' },
+  { deg: 189, ring: 'double', label: 'Punkt 8: Doppelring außen, Draht 3 | 19 (unten)' },
+  { deg: 225, ring: 'double', label: 'Punkt 9: Doppelring außen, Draht 7 | 16 (unten links)' },
+  { deg: 261, ring: 'double', label: 'Punkt 10: Doppelring außen, Draht 8 | 11 (links)' },
+  { deg: 297, ring: 'double', label: 'Punkt 11: Doppelring außen, Draht 14 | 9 (oben links)' },
+  { deg: 333, ring: 'double', label: 'Punkt 12: Doppelring außen, Draht 12 | 5 (oben links)' },
+  { deg: 27, ring: 'triple', label: 'Punkt 13: Triple-Ring außen (oben rechts)' },
+  { deg: 81, ring: 'triple', label: 'Punkt 14: Triple-Ring außen (rechts oben)' },
+  { deg: 135, ring: 'triple', label: 'Punkt 15: Triple-Ring außen (rechts unten)' },
+  { deg: 189, ring: 'triple', label: 'Punkt 16: Triple-Ring außen (unten)' },
+  { deg: 243, ring: 'triple', label: 'Punkt 17: Triple-Ring außen (links unten)' },
+  { deg: 297, ring: 'triple', label: 'Punkt 18: Triple-Ring außen (links oben)' },
+  { deg: 351, ring: 'triple', label: 'Punkt 19: Triple-Ring außen (oben)' },
 ];
 const ANCHOR_COUNT = ANCHOR_DEFINITIONS.length;
 
 const CALIB_TARGETS = ANCHOR_DEFINITIONS.map(w => {
   if (w.isCenter) return { label: w.label, x: BOARD.cx, y: BOARD.cy };
-  const t = (w.deg - 90) * Math.PI / 180, r = w.ring === 'triple' ? DEFAULT_RADII.tripleOuter : BOARD.rOuter;
+  const t = (w.deg - 90) * Math.PI / 180;
+  const r = w.ring === 'singleBull' ? DEFAULT_RADII.singleBull : (w.ring === 'triple' ? DEFAULT_RADII.tripleOuter : BOARD.rOuter);
   return { label: w.label, x: BOARD.cx + r * Math.cos(t), y: BOARD.cy + r * Math.sin(t) };
 });
+
+function pxPerMmFromAnchors(points) {
+  const center = points[ANCHOR_DEFINITIONS.findIndex(a => a.isCenter)];
+  if (!center) return 0;
+  const outer = ANCHOR_DEFINITIONS.flatMap((a, i) => a.ring === 'double' ? [Math.hypot(points[i].x - center.x, points[i].y - center.y)] : []);
+  return outer.length ? outer.reduce((s, d) => s + d, 0) / outer.length / BOARD_MM.doubleOuter : 0;
+}
 
 class Homography {
   static normalize(pts) {
@@ -1038,7 +1084,7 @@ class AutoBoardDetector {
   /**
    * Erkennung (Stufe über cfg.autoLevel 1–5): Arbeitsbreiten durchprobieren, Sektor-Muster prüfen, Subpixel-Fit auf allen Ring-/Speichenkanten
    * (Fangbereich ca. ±12 px), danach ALLE Drahtkreuzungen (80) per robustem Fit; beide Ergebnisse werden gemittelt.
-   * Rückgabe: { points (15 Anker in Originalpixeln), fp, confidence, width, ms, refined, crossings, pxPerMm, uncertain } oder null
+   * Rückgabe: { points (19 Anker in Originalpixeln), fp, confidence, width, ms, refined, crossings, pxPerMm, uncertain } oder null
    */
   static async detect(media, cfg, progress = () => {}) {
     const srcW = media.videoWidth || media.naturalWidth, srcH = media.videoHeight || media.naturalHeight;
@@ -1074,7 +1120,7 @@ class AutoBoardDetector {
           const fc = AutoBoardDetector.fitCrossings(gray, gw, gh, Hb), Hb2 = fc && Homography.invert(fc.Hcb);
           if (Hb2) {
             const ptsB = toSrc(Hb2, gw, gh);
-            const pxmm0 = ptsA.slice(1, 11).reduce((s, p) => s + Math.hypot(p.x - ptsA[0].x, p.y - ptsA[0].y), 0) / 10 / 170;
+            const pxmm0 = pxPerMmFromAnchors(ptsA);
             const dev = ptsA.reduce((s, p, i) => s + Math.hypot(p.x - ptsB[i].x, p.y - ptsB[i].y), 0) / ptsA.length / pxmm0;
             console.log(`[Auto] ${fc.n}/${fc.found} Drahtkreuzungen, Abweichung zum Kantenfit Ø ${dev.toFixed(2)} mm`);
             if (dev < 1.5) { ptsA = ptsA.map((p, i) => ({ x: (p.x + ptsB[i].x) / 2, y: (p.y + ptsB[i].y) / 2 })); crossings = fc.n; }
@@ -1083,7 +1129,7 @@ class AutoBoardDetector {
         points = ptsA;
       }
     }
-    const pxPerMm = points.slice(1, 11).reduce((s, p) => s + Math.hypot(p.x - points[0].x, p.y - points[0].y), 0) / 10 / 170;
+    const pxPerMm = pxPerMmFromAnchors(points);
     const confidence = Math.min(1, 0.5 * best.fp + 0.5 * Math.min(1, best.lad / 0.8));
     return { points, fp: best.fp, confidence, width: best.width, ms: Math.round(performance.now() - t0), refined, crossings, pxPerMm, uncertain };
   }
@@ -1156,8 +1202,8 @@ function injectCss() {
   s.id = 'adv-css';
   s.textContent = `
 .adv-wrap{position:relative;overflow:hidden;background:#000}
-.adv-cal-canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:crosshair}
-.adv-loupe{position:absolute;right:8px;top:8px;width:144px;height:144px;border:2px solid #fff;border-radius:50%;pointer-events:none;display:none;background:#000;box-shadow:0 2px 10px rgba(0,0,0,.6)}
+.adv-cal-canvas{position:absolute;inset:auto;width:auto;height:auto;touch-action:none;cursor:crosshair}
+.adv-loupe{position:absolute;left:auto;right:auto;top:auto;bottom:auto;width:144px;height:144px;border:2px solid #fff;border-radius:50%;pointer-events:none;display:none;background:#000;box-shadow:0 2px 10px rgba(0,0,0,.6)}
 .adv-status{position:absolute;left:8px;top:8px;padding:4px 10px;border-radius:12px;background:rgba(0,0,0,.65);color:#fff;font:600 12px system-ui,sans-serif;pointer-events:none}
 .adv-panel{position:absolute;left:0;right:0;bottom:0;padding:10px;background:rgba(10,12,18,.88);color:#fff;font:14px system-ui,sans-serif;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .adv-panel .adv-msg{flex:1 1 100%;font-weight:600}
@@ -1165,7 +1211,7 @@ function injectCss() {
 .adv-btn:disabled{opacity:.4}.adv-btn.adv-ok{background:#16a34a}.adv-btn.adv-sel{background:#f59e0b;color:#000}
 .adv-pop{position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:99999;width:min(94vw,420px);background:#111827;color:#fff;border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,.5);font:15px system-ui,sans-serif;overflow:hidden}
 .adv-pop[hidden]{display:none}
-.adv-pop-main{display:flex;align-items:center;gap:8px;padding:12px}
+.adv-pop-main{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:12px}
 .adv-pop-label{flex:1;font-weight:700;font-size:18px}.adv-pop-pts{opacity:.7;margin-right:4px}
 .adv-pop-bar{height:4px;background:#1f2937}.adv-pop-bar i{display:block;height:100%;width:100%;background:#22c55e;transform-origin:left;animation:advbar linear forwards}
 @keyframes advbar{from{transform:scaleX(1)}to{transform:scaleX(0)}}
@@ -1248,6 +1294,25 @@ function pxPerMmOf(H) {
   return (s / 4 / 80) * (BOARD.rOuter / 170);
 }
 
+// Gleiche object-fit:contain-Fläche wie Video/Foto verwenden, damit Pixelkoordinaten
+// und Canvas-Layer nicht auf den quadratischen Letterbox-Rahmen gestreckt werden.
+function containedImageRect(host, sourceWidth, sourceHeight) {
+  const width = host.clientWidth, height = host.clientHeight;
+  if (!width || !height || !sourceWidth || !sourceHeight) return { left: 0, top: 0, width, height };
+  const scale = Math.min(width / sourceWidth, height / sourceHeight);
+  const drawWidth = sourceWidth * scale, drawHeight = sourceHeight * scale;
+  return { left: (width - drawWidth) / 2, top: (height - drawHeight) / 2, width: drawWidth, height: drawHeight };
+}
+
+function alignContainedCanvas(canvas, host, sourceWidth, sourceHeight) {
+  const r = containedImageRect(host, sourceWidth, sourceHeight);
+  Object.assign(canvas.style, {
+    inset: 'auto', left: `${r.left}px`, top: `${r.top}px`, right: 'auto', bottom: 'auto',
+    width: `${r.width}px`, height: `${r.height}px`,
+  });
+  return r;
+}
+
 class ManualCalibrationOverlay {
   constructor(host, mediaSource, cfg, initial = null, note = '') {
     this.host = host; this.mediaSource = mediaSource; this.cfg = cfg; this.note = note;
@@ -1273,19 +1338,44 @@ class ManualCalibrationOverlay {
         const r = cvs.getBoundingClientRect();
         return { x: (e.clientX - r.left) * cvs.width / r.width, y: (e.clientY - r.top) * cvs.height / r.height, k: cvs.width / r.width };
       };
+      let loupePoint = null;
       const showLoupe = p => {
-        if (!p) { loupe.style.display = 'none'; return; }
-        const span = 36 * Math.max(1, w / 1280);
+        if (!p) { loupePoint = null; loupe.style.display = 'none'; return; }
+        loupePoint = { x: p.x, y: p.y };
+        const fit = containedImageRect(this.host, w, h), size = 144;
+        const lx = p.x < w / 2 ? fit.left + fit.width - size - 8 : fit.left + 8;
+        const ly = p.y < h / 2 ? fit.top + fit.height - size - 8 : fit.top + 8;
+        loupe.style.left = `${Math.max(0, Math.min(this.host.clientWidth - size, lx))}px`;
+        loupe.style.right = 'auto'; loupe.style.top = `${Math.max(0, Math.min(this.host.clientHeight - size, ly))}px`; loupe.style.bottom = 'auto';
+        const span = Math.min(w, h, 36 * Math.max(1, w / 1280));
+        const sx = Math.max(0, Math.min(w - span, p.x - span / 2));
+        const sy = Math.max(0, Math.min(h - span, p.y - span / 2));
+        const crossX = (p.x - sx) * 144 / span, crossY = (p.y - sy) * 144 / span;
         lctx.clearRect(0, 0, 144, 144);
-        try { lctx.drawImage(this.mediaSource, p.x - span / 2, p.y - span / 2, span, span, 0, 0, 144, 144); } catch (_) {}
-        lctx.lineWidth = 1.5;
+        try { lctx.drawImage(this.mediaSource, sx, sy, span, span, 0, 0, 144, 144); } catch (_) {}
         for (const [c, wd] of [['rgba(0,0,0,.8)', 3.5], ['#00ff88', 1.2]]) {
           lctx.strokeStyle = c; lctx.lineWidth = wd; lctx.beginPath();
-          lctx.moveTo(72 - 60, 72); lctx.lineTo(72 - 6, 72); lctx.moveTo(72 + 6, 72); lctx.lineTo(72 + 60, 72);
-          lctx.moveTo(72, 72 - 60); lctx.lineTo(72, 72 - 6); lctx.moveTo(72, 72 + 6); lctx.lineTo(72, 72 + 60); lctx.stroke();
+          const gap = 6, arm = 60, x1 = Math.max(0, crossX - arm), x2 = Math.min(144, crossX + arm), y1 = Math.max(0, crossY - arm), y2 = Math.min(144, crossY + arm);
+          if (crossX - gap > x1) { lctx.moveTo(x1, crossY); lctx.lineTo(crossX - gap, crossY); }
+          if (crossX + gap < x2) { lctx.moveTo(crossX + gap, crossY); lctx.lineTo(x2, crossY); }
+          if (crossY - gap > y1) { lctx.moveTo(crossX, y1); lctx.lineTo(crossX, crossY - gap); }
+          if (crossY + gap < y2) { lctx.moveTo(crossX, crossY + gap); lctx.lineTo(crossX, y2); }
+          lctx.stroke();
         }
         loupe.style.display = 'block';
       };
+      const resizeObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(() => {
+        alignContainedCanvas(cvs, this.host, w, h);
+        if (loupePoint) showLoupe(loupePoint);
+        schedule();
+      }) : null;
+      const onResize = () => {
+        alignContainedCanvas(cvs, this.host, w, h);
+        if (loupePoint) showLoupe(loupePoint);
+        schedule();
+      };
+      resizeObserver?.observe(this.host);
+      window.addEventListener('resize', onResize, { passive: true });
       const drawCross = (p, color, s, bad) => {
         const arm = 15 * s, gap = 3.5 * s;
         for (const [c, wd] of [['rgba(0,0,0,.8)', (bad ? 5 : 4) * s], [color, (bad ? 2.4 : 1.6) * s]]) {
@@ -1305,8 +1395,9 @@ class ManualCalibrationOverlay {
         }
         const s = Math.max(1, cvs.width / 640);
         this.pts.forEach((p, i) => {
-          const bad = fit && n >= 7 && fit.errors[i] > 3, triple = ANCHOR_DEFINITIONS[i] && ANCHOR_DEFINITIONS[i].ring === 'triple';
-          drawCross(p, bad ? '#ff9f1a' : (i === 0 ? '#ff4757' : triple ? '#4dabf7' : '#00ff88'), s, bad);
+          const anchor = ANCHOR_DEFINITIONS[i], bad = fit && n >= 7 && fit.errors[i] > 3;
+          const color = bad ? '#ff9f1a' : (anchor?.isCenter ? '#ff4757' : anchor?.ring === 'singleBull' ? '#ffd166' : anchor?.ring === 'triple' ? '#4dabf7' : '#00ff88');
+          drawCross(p, color, s, bad);
           ctx.fillStyle = '#fff'; ctx.strokeStyle = 'rgba(0,0,0,.8)'; ctx.lineWidth = 3 * s; ctx.font = `700 ${12 * s}px system-ui`;
           ctx.strokeText(String(i + 1), p.x + 10 * s, p.y - 10 * s); ctx.fillText(String(i + 1), p.x + 10 * s, p.y - 10 * s);
         });
@@ -1331,9 +1422,10 @@ class ManualCalibrationOverlay {
       };
       const move = e => { if (drag >= 0) { const c = toCam(e); this.pts[drag] = { x: c.x, y: c.y }; showLoupe(this.pts[drag]); schedule(); } };
       const up = () => { drag = -1; showLoupe(null); redraw(false); };
-      const close = result => { cancelAnimationFrame(raf); cvs.remove(); panel.remove(); loupe.remove(); resolve(result); };
+      const close = result => { cancelAnimationFrame(raf); resizeObserver?.disconnect(); window.removeEventListener('resize', onResize); cvs.remove(); panel.remove(); loupe.remove(); resolve(result); };
 
       cvs.addEventListener('pointerdown', down); cvs.addEventListener('pointermove', move); cvs.addEventListener('pointerup', up);
+      alignContainedCanvas(cvs, this.host, w, h);
       bReset.onclick = () => { this.pts = []; this.note = ''; redraw(false); };
       bCancel.onclick = () => close(null);
       bOk.onclick = () => close(this.pts);
@@ -1346,6 +1438,7 @@ class MotionDetector {
   constructor(cfg) { this.cfg = cfg; this.cvs = document.createElement('canvas'); this.ctx = this.cvs.getContext('2d', { willReadFrequently: true }); this.roi = null; }
 
   grab(mediaEl) {
+    if (!this.ctx || !mediaEl) throw new Error('Kamerabild oder Canvas-Kontext nicht verfügbar.');
     const w = this.cfg.width, srcW = mediaEl.videoWidth || mediaEl.naturalWidth || 1280;
     const srcH = mediaEl.videoHeight || mediaEl.naturalHeight || 720;
     const h = Math.round(w * srcH / srcW);
@@ -1356,11 +1449,13 @@ class MotionDetector {
     return g;
   }
 
-  /** Graustufen in Vollauflösung (max. 1920 px breit) für die Spitzenerkennung */
+  /** Graustufen in hoher Auflösung (max. 2560 px breit) für feinere Spitzen-/Schaftdetails */
   grabFull(mediaEl) {
+    if (!mediaEl) throw new Error('Kein Kamerabild verfügbar.');
     const srcW = mediaEl.videoWidth || mediaEl.naturalWidth || 1280, srcH = mediaEl.videoHeight || mediaEl.naturalHeight || 720;
-    const sc = Math.min(1, 1920 / srcW), w = Math.round(srcW * sc), h = Math.round(srcH * sc);
+    const sc = Math.min(1, 2560 / srcW), w = Math.round(srcW * sc), h = Math.round(srcH * sc);
     if (!this._fc) { this._fc = document.createElement('canvas'); this._fx = this._fc.getContext('2d', { willReadFrequently: true }); }
+    if (!this._fx) throw new Error('Canvas-Kontext für die Spitzenerkennung nicht verfügbar.');
     if (this._fc.width !== w || this._fc.height !== h) { this._fc.width = w; this._fc.height = h; }
     this._fx.drawImage(mediaEl, 0, 0, w, h);
     const d = this._fx.getImageData(0, 0, w, h).data, g = new Uint8Array(w * h);
@@ -1380,9 +1475,18 @@ class MotionDetector {
     this.roi = roi; this.roiCount = Math.max(1, n);
   }
 
-  diff(a, b) {
-    const m = new Uint8Array(a.length); let n = 0; const th = this.cfg.pixelThreshold;
-    for (let i = 0; i < a.length; i++) if ((!this.roi || this.roi[i]) && Math.abs(a[i] - b[i]) > th) { m[i] = 1; n++; }
+  diff(a, b, { includeMask = true } = {}) {
+    const m = includeMask ? new Uint8Array(a.length) : null, shifts = new Uint32Array(511); let n = 0, samples = 0;
+    for (let i = 0; i < a.length; i++) if (!this.roi || this.roi[i]) { shifts[b[i] - a[i] + 255]++; samples++; }
+    let sum = 0, offset = 0;
+    for (let k = 0; k < shifts.length; k++) { sum += shifts[k]; if (sum >= samples / 2) { offset = k - 255; break; } }
+    const noise = new Uint32Array(256);
+    for (let i = 0; i < a.length; i++) if (!this.roi || this.roi[i]) noise[Math.min(255, Math.abs((b[i] - a[i]) - offset))]++;
+    sum = 0; let noiseMedian = 0;
+    for (let k = 0; k < noise.length; k++) { sum += noise[k]; if (sum >= samples / 2) { noiseMedian = k; break; } }
+    const threshold = Math.min(24, Math.max(this.cfg.pixelThreshold, Math.round(noiseMedian * 1.5 + 3)));
+    for (let i = 0; i < a.length; i++) if ((!this.roi || this.roi[i]) && Math.abs((b[i] - a[i]) - offset) > threshold) { if (m) m[i] = 1; n++; }
+    this.lastDiffMetrics = { offset, noiseMedian, threshold };
     return { mask: m, count: n, ratio: n / (this.roiCount || a.length) };
   }
 
@@ -1401,9 +1505,18 @@ class MotionDetector {
           if (mask[q] && !seen[q]) { seen[q] = 1; stack.push(q); }
         }
       }
-      if (pix.length >= this.cfg.minBlobPixels) out.push(pix);
+      if (pix.length >= Math.max(2, this.cfg.minBlobPixels)) out.push(pix);
     }
     return out.sort((a, b) => b.length - a.length);
+  }
+  dartLike(blob) {
+    if (!blob || blob.length < 3) return false;
+    let x0 = this.w, y0 = this.h, x1 = -1, y1 = -1;
+    for (const p of blob) { const x = p % this.w, y = (p / this.w) | 0; x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+    const bw = x1 - x0 + 1, bh = y1 - y0 + 1, longSide = Math.max(bw, bh), shortSide = Math.max(1, Math.min(bw, bh));
+    // Ein echter Dart erzeugt meist eine längliche Änderung; kleine, kompakte Schatten-/Rauschflecken ignorieren.
+    // Sensitivität für dünne, teilweise verdeckte Darts erhöhen; kompakte Pixelcluster bleiben ausgeschlossen.
+    return longSide >= 4 && longSide / shortSide >= 1.2 && blob.length >= Math.max(3, this.cfg.minBlobPixels);
   }
 }
 
@@ -1573,11 +1686,11 @@ class TipLocator {
 
 class ScoreFeedback {
   constructor(ms) {
-    injectCss(); this.ms = ms; this.cur = null; this.timer = null;
+    injectCss(); this.ms = ms; this.cur = null; this.timer = null; this.queue = [];
     this.root = el('div', 'adv-pop'); this.root.hidden = true;
     this.root.innerHTML = `
       <div class="adv-pop-main"><span class="adv-pop-label"></span><span class="adv-pop-pts"></span>
-        <button class="adv-btn adv-ok" data-a="ok">${ICON.check}</button><button class="adv-btn" data-a="fix">Korrigieren</button></div>
+        <button class="adv-btn adv-ok" data-a="right">Richtig</button><button class="adv-btn" data-a="wrong">Falsch</button><button class="adv-btn" data-a="voice">Sprechen</button><button class="adv-btn" data-a="fix">Korrigieren</button></div>
       <div class="adv-pop-bar"><i></i></div>
       <div class="adv-pop-fix" hidden>
         <div class="adv-row adv-mult"></div><div class="adv-row adv-seg"></div>
@@ -1592,9 +1705,15 @@ class ScoreFeedback {
     this.root.addEventListener('click', e => this.click(e));
   }
 
-  show(res, cb) {
-    this.commit();
-    this.cur = { res, cb }; this.sel = { s: res.segment, m: res.multiplier };
+  show(res, cb, onVerify) {
+    const next = { res, cb, onVerify };
+    if (this.cur) { this.queue.push(next); return; }
+    this.present(next);
+  }
+
+  present(next) {
+    this.cur = next; this.sel = { s: next.res.segment, m: next.res.multiplier };
+    const res = next.res;
     this.lbl.textContent = `${res.label} erkannt` + (res.unsure ? ' (unsicher)' : ''); this.pts.textContent = `${res.points} Pkt`;
     this.fix.hidden = true; this.root.hidden = false; this.restartBar();
     clearTimeout(this.timer); this.timer = setTimeout(() => this.commit(), this.ms);
@@ -1605,7 +1724,9 @@ class ScoreFeedback {
   click(e) {
     const b = e.target.closest('button'); if (!b || !this.cur) return;
     const a = b.dataset.a;
-    if (a === 'ok') return this.commit();
+    if (a === 'right') return this.commit(true);
+    if (a === 'wrong') return this.commit(false);
+    if (a === 'voice') return this.listenForVerdict();
     if (a === 'fix') { clearTimeout(this.timer); this.bar.hidden = true; this.fix.hidden = false; this.paint(); return; }
     if (a === 'back') { this.fix.hidden = true; this.restartBar(); clearTimeout(this.timer); this.timer = setTimeout(() => this.commit(), this.ms); return; }
     if (a === 'apply') {
@@ -1615,7 +1736,7 @@ class ScoreFeedback {
         board: old.board, cam: old.cam, confidence: old.confidence, source: old.source, dartId: old.dartId, flight: old.flight,
         corrected: true, original: old.corrected ? old.original : old.label,
       });
-      return this.commit();
+      return this.commit(false);
     }
     if (b.dataset.m) this.sel.m = +b.dataset.m;
     if (b.dataset.s) this.sel.s = +b.dataset.s;
@@ -1628,13 +1749,29 @@ class ScoreFeedback {
     this.seg.querySelectorAll('button').forEach(x => x.classList.toggle('adv-sel', +x.dataset.s === s));
   }
 
-  commit() {
-    clearTimeout(this.timer);
-    const c = this.cur; this.cur = null; this.root.hidden = true;
-    if (c) c.cb(c.res);
+  listenForVerdict() {
+    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!Recognition) { this.lbl.textContent = 'Spracherkennung hier nicht verfügbar – bitte Richtig/Falsch antippen'; return; }
+    const rec = new Recognition(); rec.lang = 'de-DE'; rec.interimResults = false; rec.maxAlternatives = 1;
+    this.lbl.textContent = 'Sag jetzt „richtig“ oder „falsch“…';
+    rec.onresult = event => {
+      const heard = (event.results?.[0]?.[0]?.transcript || '').toLowerCase();
+      if (heard.includes('falsch') || heard.includes('nein')) this.commit(false);
+      else if (heard.includes('richtig') || heard.includes('ja')) this.commit(true);
+      else this.lbl.textContent = `Nicht erkannt („${heard}“) – bitte erneut sprechen oder tippen`;
+    };
+    rec.onerror = () => { if (this.cur) this.lbl.textContent = 'Spracheingabe fehlgeschlagen – bitte Richtig/Falsch tippen'; };
+    try { rec.start(); } catch (_) { this.lbl.textContent = 'Mikrofon nicht bereit – bitte Richtig/Falsch tippen'; }
   }
 
-  destroy() { clearTimeout(this.timer); this.root.remove(); }
+  commit(verdict = null) {
+    clearTimeout(this.timer);
+    const c = this.cur; this.cur = null; this.root.hidden = true;
+    if (c) { if (verdict !== null && c.onVerify) c.onVerify(verdict); c.cb(c.res); }
+    if (this.queue.length) this.present(this.queue.shift());
+  }
+
+  destroy() { clearTimeout(this.timer); this.queue = []; this.root.remove(); }
 }
 
 class AutoDartsEngine {
@@ -1645,6 +1782,7 @@ class AutoDartsEngine {
     this.H = null; this.Hinv = null; this.camSize = null;
     this.state = 'idle'; this.still = 0; this.prev = null; this.reference = null; this.timer = null;
     this.isVideoFileMode = false; this.isScreenshotMode = false; this.activeMedia = null; this.lsKey = LS_KEY;
+    this.overlayResizeObserver = null;
     this.turnDarts = []; this.turnComplete = false; this.emptyRef = null; this.refFull = null; this.dartSeq = 0; this.shotPoint = null;
     this.motion = new MotionDetector(this.cfg.motion);
     this.tip = new TipLocator(this.cfg.tip);
@@ -1661,6 +1799,10 @@ class AutoDartsEngine {
   async start() {
     injectCss();
     const host = this.cfg.container; host.classList.add('adv-wrap');
+    if (typeof ResizeObserver === 'function') {
+      this.overlayResizeObserver = new ResizeObserver(() => this.layoutOverlays());
+      this.overlayResizeObserver.observe(host);
+    } else window.addEventListener('resize', () => this.layoutOverlays(), { passive: true });
     this.video = this.cfg.video || el('video'); this.video.playsInline = true; this.video.muted = true;
     if (!this.cfg.video) host.prepend(this.video);
     if (!this.cfg.showVideo) { this.video.style.cssText = 'position:absolute;width:1px;height:1px;opacity:0'; }
@@ -1677,6 +1819,7 @@ class AutoDartsEngine {
   /** Video/Stream hat Maße: gespeicherte Kalibrierung laden und Erkennung starten */
   onMedia() {
     if (this.isScreenshotMode) return;
+    if (!this.video || !this.video.videoWidth || !this.video.videoHeight) { this.setStatus('Warte auf gültiges Kamerabild …'); return; }
     this.stopDetection(); this.resetTurnState();
     this.camSize = { w: this.video.videoWidth, h: this.video.videoHeight };
     this.H = this.Hinv = null; this.motion.roi = null;
@@ -1722,7 +1865,7 @@ class AutoDartsEngine {
     this.H = this.Hinv = null; this.motion.roi = null; this.showGrid(false);
     this.loadHomography();
     if (!this._shotClick) { this._shotClick = e => this.onShotClick(e); this.cfg.container.addEventListener('pointerdown', this._shotClick); }
-    this.setStatus(this.H ? 'Screenshot geladen – Kalibrierung gefunden, tippe aufs Bild für den Score' : 'Screenshot geladen – Auto-Erkennung oder 15 Punkte setzen');
+    this.setStatus(this.H ? 'Screenshot geladen – Kalibrierung gefunden, tippe aufs Bild für den Score' : 'Screenshot geladen – Auto-Erkennung oder 19 Punkte setzen');
     this.emit('media-ready', { calibrated: !!this.H, screenshot: true });
   }
 
@@ -1739,8 +1882,11 @@ class AutoDartsEngine {
   onShotClick(e) {
     if (!this.isScreenshotMode || this._calibrating || !this.H || !this.shotImg) return;
     if (e.target.closest && e.target.closest('.adv-panel')) return;
-    const r = this.shotImg.getBoundingClientRect();
-    const x = (e.clientX - r.left) * this.camSize.w / r.width, y = (e.clientY - r.top) * this.camSize.h / r.height;
+    const hostRect = this.cfg.container.getBoundingClientRect();
+    const view = containedImageRect(this.cfg.container, this.camSize.w, this.camSize.h);
+    if (!view.width || !view.height) return;
+    const x = (e.clientX - hostRect.left - view.left) * this.camSize.w / view.width;
+    const y = (e.clientY - hostRect.top - view.top) * this.camSize.h / view.height;
     if (x < 0 || y < 0 || x > this.camSize.w || y > this.camSize.h) return;
     const b = Homography.apply(this.H, x, y), res = Scoring.fromBoard(b.x, b.y, this.cfg.radii);
     this.shotPoint = { x, y, label: res.label }; this.drawMarks();
@@ -1760,4 +1906,716 @@ class AutoDartsEngine {
         H = Homography.rescaleSource(H, raw.width / this.camSize.w, raw.height / this.camSize.h);
       }
       this.applyHomography(H);
+    } catch (e) { console.warn('[AutoDarts] Gespeicherte Homographie ungültig', e); }
+  }
+
+  applyHomography(H) {
+    const Hi = Homography.invert(H);
+    if (!Hi) throw new Error('Homographie nicht invertierbar');
+    this.H = H; this.Hinv = Hi;
+    this.motion.roi = null;
+  }
+
+  async calibrate(initial = null, note = '') {
+    this._calibrating = true;
+    try { return await this._calibrate(initial, note); } finally { this._calibrating = false; }
+  }
+
+  async _calibrate(initial, note) {
+    this.stopDetection();
+    const mediaSource = this.media;
+
+    if (!mediaSource || (!mediaSource.videoWidth && !mediaSource.naturalWidth)) {
+      this.setStatus('Kein Bild vorhanden (Stream verbinden, Video oder Screenshot laden)');
+      return false;
+    }
+
+    this.setStatus(initial ? 'Auto-Ergebnis prüfen …' : `Bitte ${ANCHOR_COUNT} Ankerpunkte setzen...`);
+    const pts = await new ManualCalibrationOverlay(this.cfg.container, mediaSource, this.cfg, initial, note).run();
+
+    if (!pts || pts.length !== ANCHOR_COUNT) {
+      this.setStatus('Kalibrierung abgebrochen');
+      return false;
+    }
+
+    const fit = Homography.fit(pts, CALIB_TARGETS);
+    if (!fit || fit.rms > 3) {
+      this.setStatus(fit ? `Kalibrierung ungenau – Punkt ${fit.worst + 1} prüfen` : 'Kalibrierung ungültig');
+      return false;
+    }
+    const H = fit.H;
+    this.applyHomography(H);
+    localStorage.setItem(this.lsKey, JSON.stringify({ matrix: H, width: this.camSize.w, height: this.camSize.h, method: `${ANCHOR_COUNT}-pt`, savedAt: Date.now() }));
+    this.setStatus(`${ANCHOR_COUNT}-Punkte Kalibrierung erfolgreich!`);
+    this.emit('calibrated', { matrix: H, method: `${ANCHOR_COUNT}-pt` });
+
+    this.showGrid(true);
+
+    if (!this.isScreenshotMode && (this.running || !this.timer)) this.beginDetection();
+    return true;
+  }
+
+  async autoCalibrate() {
+    this.stopDetection();
+    const media = this.media;
+    if (!media || !(media.videoWidth || media.naturalWidth)) {
+      this.setStatus('Kein Bild – Stream verbinden, Video oder Screenshot laden');
+      return false;
+    }
+    this.setStatus('Auto-Erkennung läuft …');
+    let r = null;
+    try { r = await AutoBoardDetector.detect(media, this.cfg, m => this.setStatus(m)); }
+    catch (e) { console.warn('[Auto] nicht möglich:', e.message); this.setStatus('Auto-Erkennung nicht möglich: ' + e.message); }
+    if (!r) {
+      this.setStatus('Board nicht erkannt – bitte Punkte manuell setzen');
+      return this.calibrate();
+    }
+    console.log(`[Auto] fertig: Konfidenz ${Math.round(r.confidence * 100)} %, ${r.ms} ms, ${r.pxPerMm.toFixed(2)} px/mm, ` + (r.refined ? `Subpixel` + (r.crossings ? `, ${r.crossings} Drahtkreuzungen` : '') : 'ohne Subpixel'));
+    return this.calibrate(r.points, `Auto ${Math.round(r.confidence * 100)} % sicher` + (r.refined ? ', Subpixel' : '') + (r.crossings ? `, ${r.crossings} Kreuzungen` : '') + (r.uncertain ? ' (unsicher – bitte prüfen)' : ''));
+  }
+
+  clearCalibration() { localStorage.removeItem(this.lsKey); this.H = this.Hinv = null; this.stopDetection(); this.resetTurnState(); }
+
+  showGrid(on = true) {
+    if (this.gridCvs) this.gridCvs.remove(); this.gridCvs = null;
+    if (!on || !this.Hinv || !this.camSize) return;
+    const c = this.gridCvs = el('canvas', 'adv-cal-canvas'); c.style.pointerEvents = 'none';
+    c.width = this.camSize.w; c.height = this.camSize.h;
+    drawBoardOverlay(c.getContext('2d'), this.Hinv, this.cfg.radii);
+    this.cfg.container.append(c);
+    alignContainedCanvas(c, this.cfg.container, this.camSize.w, this.camSize.h);
+    if (this.markCvs) this.cfg.container.append(this.markCvs);               // Markierungen bleiben über dem Raster
+  }
+
+  layoutOverlays() {
+    if (!this.camSize) return;
+    for (const c of [this.gridCvs, this.markCvs]) if (c?.isConnected) alignContainedCanvas(c, this.cfg.container, this.camSize.w, this.camSize.h);
+  }
+
+  /* ---------------------------------------------------------------- Markierungen (Spitze rot, Flight blau) */
+
+  ensureMarks() {
+    if (!this.markCvs || !this.markCvs.isConnected) { this.markCvs = el('canvas', 'adv-cal-canvas'); this.markCvs.style.pointerEvents = 'none'; this.cfg.container.append(this.markCvs); }
+    if (this.camSize && (this.markCvs.width !== this.camSize.w || this.markCvs.height !== this.camSize.h)) { this.markCvs.width = this.camSize.w; this.markCvs.height = this.camSize.h; }
+    if (this.camSize) alignContainedCanvas(this.markCvs, this.cfg.container, this.camSize.w, this.camSize.h);
+    return this.markCvs;
+  }
+
+  clearMarks() { if (this.markCvs && this.markCvs.isConnected) this.markCvs.getContext('2d').clearRect(0, 0, this.markCvs.width, this.markCvs.height); }
+
+  drawMarks() {
+    if (!this.camSize) return;
+    const c = this.ensureMarks(), g = c.getContext('2d'), o = this.cfg.marks, s = Math.max(1, c.width / 640);
+    g.clearRect(0, 0, c.width, c.height);
+    const label = (txt, x, y, col) => { g.font = `700 ${12 * s}px system-ui`; g.lineWidth = 3.5 * s; g.strokeStyle = 'rgba(0,0,0,.85)'; g.strokeText(txt, x, y); g.fillStyle = col; g.fillText(txt, x, y); };
+    this.turnDarts.forEach(d => {
+      if (o.flight && d.flight) {
+        g.setLineDash([5 * s, 3 * s]); g.strokeStyle = 'rgba(255,190,0,.95)'; g.lineWidth = 1.6 * s;
+        g.beginPath(); g.moveTo(d.tip.x, d.tip.y); g.lineTo(d.flight.x, d.flight.y); g.stroke(); g.setLineDash([]);
+        g.strokeStyle = 'rgba(0,0,0,.8)'; g.lineWidth = 4.6 * s; g.beginPath(); g.arc(d.flight.x, d.flight.y, 7 * s, 0, 7); g.stroke();
+        g.strokeStyle = '#4dabf7'; g.lineWidth = 2.4 * s; g.beginPath(); g.arc(d.flight.x, d.flight.y, 7 * s, 0, 7); g.stroke();
+      }
+      if (o.tip) {
+        if (d.unsure) { g.setLineDash([3 * s, 3 * s]); g.strokeStyle = '#ffd43b'; g.lineWidth = 2 * s; g.beginPath(); g.arc(d.tip.x, d.tip.y, 11 * s, 0, 7); g.stroke(); g.setLineDash([]); }
+        g.fillStyle = '#ff2d2d'; g.strokeStyle = '#fff'; g.lineWidth = 2 * s;
+        g.beginPath(); g.arc(d.tip.x, d.tip.y, 4.5 * s, 0, 7); g.fill(); g.stroke();
+      }
+      if (o.label) label(d.label + (d.unsure ? '?' : ''), d.tip.x + 9 * s, d.tip.y - 9 * s, '#fff');
+    });
+    if (this.shotPoint) {
+      const p = this.shotPoint; g.fillStyle = '#ff2d2d'; g.strokeStyle = '#fff'; g.lineWidth = 2 * s;
+      g.beginPath(); g.arc(p.x, p.y, 4.5 * s, 0, 7); g.fill(); g.stroke(); label(p.label, p.x + 9 * s, p.y - 9 * s, '#fff');
+    }
+  }
+
+  /* ---------------------------------------------------------------- Erkennung */
+
+  resetTurnState() {
+    this.turnDarts = []; this.turnComplete = false; this.shotPoint = null; this.emptyRef = null; this.refFull = null;
+    this.clearMarks(); this.emitTurn();
+  }
+
+  get turnLimit() { const n = Number(this.cfg.turn?.darts); return Math.min(3, Math.max(1, Number.isFinite(n) ? Math.floor(n) : 3)); }
+  emitTurn() { this.emit('turn-update', { count: this.turnDarts.length, max: this.turnLimit, complete: this.turnComplete }); }
+
+  beginDetection() {
+    if (!this.camSize) return;
+    const debugPanel = document.getElementById('detection-debug');
+    if (debugPanel) debugPanel.hidden = false;
+    this.running = true; this.state = 'init'; this.still = 0; this.prev = null; this.reference = null;
+    this.resetTurnState();
+    const mediaSource = this.video;
+    this.motion.grab(mediaSource);
+    this.motion.buildRoi(this.H, this.camSize.w, this.camSize.h);
+    clearInterval(this.timer);
+    this.timer = setInterval(() => this.tick(), 1000 / this.cfg.motion.fps);
+    this.setStatus(this.isVideoFileMode ? 'Video-Analyse aktiv – Warte auf leeres Board …' : 'Stream aktiv – Warte auf leeres Board …');
+  }
+
+  stopDetection() { clearInterval(this.timer); this.timer = null; this.state = 'idle'; }
+
+  async captureTrainingFrame() {
+    const media = this.video, srcW = media?.videoWidth, srcH = media?.videoHeight;
+    if (!srcW || !srcH) return null;
+    const scale = Math.min(1, 640 / Math.max(srcW, srcH));
+    const canvas = document.createElement('canvas'); canvas.width = Math.max(1, Math.round(srcW * scale)); canvas.height = Math.max(1, Math.round(srcH * scale));
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    try { ctx.drawImage(media, 0, 0, canvas.width, canvas.height); }
+    catch (_) { return null; }
+    return new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.72));
+  }
+
+  /** Neue Aufnahme: aktuelles Bild gilt als leeres Board (z. B. nach dem Darts ziehen) */
+  newTurn() {
+    if (!this.H || this.isScreenshotMode) return;
+    const mediaSource = this.video;
+    if (!mediaSource || !mediaSource.videoWidth) return;
+    this.resetTurnState();
+    this.reference = this.motion.grab(mediaSource); this.emptyRef = this.reference; this.refFull = this.motion.grabFull(mediaSource);
+    if (!this.timer) this.beginDetection();
+    this.state = 'armed';
+    this.setStatus('Neue Aufnahme – Bereit');
+  }
+
+  drawDiffPreview(mask) {
+    const canvas = document.getElementById('diff-preview');
+    if (!canvas || !this.motion.w || !this.motion.h) return;
+    const w = this.motion.w, h = this.motion.h;
+    if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+    const ctx = canvas.getContext('2d'); if (!ctx) return;
+    const image = ctx.createImageData(w, h), px = image.data;
+    for (let i = 0, j = 0; i < w * h; i++, j += 4) {
+      const changed = !!mask?.[i];
+      px[j] = changed ? 0 : 12; px[j + 1] = changed ? 255 : 16; px[j + 2] = changed ? 136 : 22; px[j + 3] = 255;
+    }
+    ctx.putImageData(image, 0, 0);
+  }
+
+  tick() {
+    const mediaSource = this.video;
+    if (!mediaSource || mediaSource.readyState < 2 || (!this.motion.roi && !this.prepareRoi())) return;
+    const g = this.motion.grab(mediaSource), m = this.cfg.motion;
+    const debugPanel = document.getElementById('detection-debug');
+    const debugNow = !!debugPanel && !debugPanel.hidden && ((this.debugTick = (this.debugTick || 0) + 1) % 3 === 0);
+    const frameDiff = this.prev ? this.motion.diff(g, this.prev, { includeMask: false }) : null;
+    const ratio = frameDiff?.ratio || 0;
+    const refRatio = this.reference ? this.motion.diff(g, this.reference, { includeMask: false }).ratio : 0;
+    const boardRef = this.emptyRef || this.reference;
+    const boardDiff = debugNow && boardRef ? this.motion.diff(g, boardRef, { includeMask: true }) : null;
+    if (debugNow) {
+      const stateEl = document.getElementById('debug-state'), diffEl = document.getElementById('debug-diff');
+      if (stateEl) stateEl.textContent = `Status: ${this.state === 'armed' ? 'bereit' : this.state === 'moving' ? 'Bewegung / Schatten prüfen' : this.state === 'busy' ? 'Bild wird geprüft' : this.state}`;
+      const lm = this.motion.lastDiffMetrics || {};
+      if (diffEl) diffEl.textContent = `Frame ${((ratio || 0) * 100).toFixed(2)} % · Board ${(boardDiff?.ratio * 100 || 0).toFixed(2)} % · Licht ${lm.offset ?? 0} · Rauschen ${lm.noiseMedian ?? 0} · Schwelle ${lm.threshold ?? m.pixelThreshold}`;
+      this.drawDiffPreview(boardDiff?.mask || null);
+      const fill = document.getElementById('diff-meter-fill');
+      if (fill) fill.style.width = `${Math.min(100, ((boardDiff?.ratio || 0) / 0.2) * 100)}%`;
+    }
+    this.prev = g;
+    switch (this.state) {
+      case 'init':
+        this.still = ratio < m.stillRatio ? this.still + 1 : 0;
+        if (this.still >= m.stillFrames) {
+          this.reference = g; this.emptyRef = g; this.refFull = this.motion.grabFull(mediaSource);
+          this.state = 'armed'; this.setStatus(`Bereit – maximal ${this.turnLimit} Darts`); this.emitTurn();
+        }
+        break;
+      case 'armed': {
+        // Bewegung zwischen zwei Bildern ODER schleichende Änderung gegenüber der Referenz (kleiner Dart, der ruhig einschlägt)
+        if (ratio > m.startRatio || refRatio > m.refRatio) { this.state = 'moving'; this.still = 0; if (!this.turnComplete) this.setStatus('Bewegung …'); }
+        break;
+      }
+      case 'moving':
+        this.still = ratio < m.stillRatio ? this.still + 1 : 0;
+        if (this.still >= m.stillFrames) this.settled(g).catch(err => { console.error('[Erkennung] Auswertung fehlgeschlagen:', err); this.state = 'armed'; this.still = 0; this.setStatus('Erkennungsfehler – erneut bereit'); });
+        break;
+    }
+  }
+
+  prepareRoi() { if (!this.H || !this.camSize) return false; this.motion.buildRoi(this.H, this.camSize.w, this.camSize.h); return true; }
+
+  /** Grobe Fläche (Arbeitsauflösung) -> Suchbereich + Startpunkt im Vollbild */
+  blobBox(blob, cur) {
+    const mo = this.motion, sx = cur.w / mo.w, sy = cur.h / mo.h; let x0 = 1e9, y0 = 1e9, x1 = -1, y1 = -1, cx = 0, cy = 0;
+    for (const p of blob) { const x = p % mo.w, y = (p / mo.w) | 0; x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); cx += x; cy += y; }
+    const mg = Math.round(0.07 * mo.w) + 2;                                    // großzügig: dünner Schaft/Spitze fehlen im groben Blob
+    return { box: { x0: (x0 - mg) * sx, y0: (y0 - mg) * sy, x1: (x1 + 1 + mg) * sx, y1: (y1 + 1 + mg) * sy }, seed: { x: (cx / blob.length + .5) * sx, y: (cy / blob.length + .5) * sy } };
+  }
+
+  /** Dartspitze + Flight in Kamerakoordinaten (px des Videos) */
+  locateDart(blob, cur) {
+    const ref = this.refFull;
+    if (ref && ref.w === cur.w && ref.h === cur.h) {
+      const { box, seed } = this.blobBox(blob, cur), sc = cur.w / this.camSize.w;
+      const Hs = this.Hinv.map((r, i) => (i < 2 ? r.map(v => v * sc) : r.slice()));          // Board -> Vollbild (skaliert)
+      const bs = Homography.apply(this.H, seed.x / sc, seed.y / sc);
+      const nd = DartLocator.normalDirection(Hs, cur.w, cur.h, bs.x, bs.y);
+      const r = DartLocator.analyze(ref.g, cur.g, cur.w, cur.h, box, { seed, center: Homography.apply(Hs, BOARD.cx, BOARD.cy), normalDir: nd });
+      if (r) {
+        // Kamera zu frontal: der Dart zeigt fast direkt auf die Kamera, die Spitze verschwindet hinter dem Flight -> als unsicher markieren
+        const frontal = !!nd && nd.ang < 20;                                  // Blickwinkel zwischen Kamera und Board-Normale unter ca. 20°
+        return { tip: { x: r.tip.x / sc, y: r.tip.y / sc }, flight: { x: r.flight.x / sc, y: r.flight.y / sc }, conf: r.conf, unsure: r.conf < 0.5 || r.compact || frontal, frontal, D: nd ? nd.ang : 0, ext: r.elong, source: nd ? 'full' : 'full-axis' };
+      }
+    }
+    const center = Homography.apply(this.Hinv, BOARD.cx, BOARD.cy);                          // Rückfall: grobe Heuristik
+    const t = this.tip.locateSync(this.video, blob, this.motion, center);
+    return { tip: { x: t.x, y: t.y }, flight: null, conf: 0.3, unsure: true, source: 'coarse' };
+  }
+
+  /** Änderung = Dart wurde herausgezogen (Bild ähnelt dem leeren Board), nicht hinzugefügt */
+  isRemoval(blob, g) {
+    if (!this.emptyRef) return false;
+    let sRef = 0, sEmp = 0;
+    for (const i of blob) { sRef += Math.abs(g[i] - this.reference[i]); sEmp += Math.abs(g[i] - this.emptyRef[i]); }
+    return sEmp < 0.45 * sRef;
+  }
+
+  endTurn(g, cur, reason) {
+    const darts = this.turnDarts.slice();
+    this.turnDarts = []; this.turnComplete = false; this.shotPoint = null;
+    this.reference = g; this.emptyRef = g; this.refFull = cur; this.state = 'armed';
+    this.clearMarks();
+    this.setStatus('Darts gezogen – Bereit für die nächste Aufnahme');
+    this.emit('turn-reset', { reason, darts }); this.emitTurn();
+  }
+
+  async settled(g) {
+    this.state = 'busy';
+    const m = this.cfg.motion, tn = { ...this.cfg.turn, darts: this.turnLimit };
+    // Mehrere kleine Bilder mitteln: Schattenfilter bleibt erhalten, ohne drei teure Vollbilder zu konvertieren.
+    await new Promise(resolve => setTimeout(resolve, 80));
+    const g1 = this.motion.grab(this.video);
+    await new Promise(resolve => setTimeout(resolve, 80));
+    const g2 = this.motion.grab(this.video);
+    const median3 = (a, b, c) => {
+      const out = new Uint8Array(a.length);
+      for (let i = 0; i < a.length; i++) out[i] = Math.max(Math.min(a[i], b[i]), Math.min(Math.max(a[i], b[i]), c[i]));
+      return out;
+    };
+    g = median3(g, g1, g2);
+    const d = this.motion.diff(g, this.reference);
+
+    if (d.ratio > m.maxChangeRatio) {                                          // Hand im Bild: abwarten, Referenz nicht anfassen
+      this.state = 'armed'; this.setStatus(this.turnComplete ? 'Darts werden gezogen …' : 'Hand im Bild …'); return;
+    }
+    // Die teure, bis zu 2560 px breite Aufnahme erst nach dem groben Hand-/Bewegungsfilter erzeugen.
+    const cur = this.motion.grabFull(this.video);
+    if (this.turnDarts.length && this.emptyRef) {                              // Board wieder leer = Darts gezogen = Aufnahme beendet
+      const e = this.motion.diff(g, this.emptyRef);
+      if (e.ratio < tn.emptyRatio) { this.endTurn(g, cur, 'removed'); return; }
+    }
+    const blobs = this.motion.blobs(d.mask).filter(blob => this.motion.dartLike(blob));
+    if (!blobs.length) {
+      // Wichtig: Bei erfolgloser Blob-Erkennung die Referenz NICHT auf das aktuelle Bild setzen.
+      // Sonst wird eine noch nicht erkannte Dart-Änderung in der Referenz "absorbiert"
+      // und verschwindet beim nächsten Versuch aus der Differenz zur Referenz.
+      this.state = 'armed';
+      this.setStatus(this.turnComplete ? 'Aufnahme beendet – bitte Darts ziehen' : 'Bereit – Änderung wird weiter geprüft');
+      return;
+    }
+
+    if (this.turnDarts.length && this.isRemoval(blobs[0], g)) {                // einzelner Dart herausgezogen
+      const mo = this.motion, sx = this.camSize.w / mo.w, sy = this.camSize.h / mo.h; let cx = 0, cy = 0;
+      for (const p of blobs[0]) { cx += ((p % mo.w) + .5) * sx; cy += (((p / mo.w) | 0) + .5) * sy; } cx /= blobs[0].length; cy /= blobs[0].length;
+      let bi = -1, bd = Infinity;
+      this.turnDarts.forEach((t, i) => { const dd = Math.min(Math.hypot(t.tip.x - cx, t.tip.y - cy), t.flight ? Math.hypot(t.flight.x - cx, t.flight.y - cy) : Infinity); if (dd < bd) { bd = dd; bi = i; } });
+      if (bi >= 0) { const gone = this.turnDarts.splice(bi, 1)[0]; this.emit('dart-removed', gone); }
+      this.reference = g; this.refFull = cur; this.state = 'armed'; this.drawMarks(); this.emitTurn();
+      this.setStatus(this.turnComplete ? 'Darts werden gezogen …' : 'Dart entfernt'); return;
+    }
+    if (this.turnComplete) {                                                   // Aufnahme voll: nichts mehr werten, nur auf das Ziehen warten
+      this.reference = g; this.refFull = cur; this.state = 'armed'; this.setStatus('Aufnahme beendet – bitte Darts ziehen'); return;
+    }
+
+    const loc = this.locateDart(blobs[0], cur);
+    const b = Homography.apply(this.H, loc.tip.x, loc.tip.y);
+    const res = Scoring.fromBoard(b.x, b.y, this.cfg.radii);
+
+    if (!isFinite(res.board.r) || res.board.r > m.maxScoreRadius) {
+      // Außerhalb des gültigen Boards: Referenz behalten, damit die Änderung erneut
+      // ausgewertet werden kann, statt sie stillschweigend als neuen Ausgangszustand zu übernehmen.
+      this.state = 'armed';
+      this.setStatus('Treffer außerhalb des Boards – Änderung bleibt zur Prüfung');
+      this.emit('detect-failed', { tip: loc.tip });
+      return;
+    }
+
+    // Referenz erst nach erfolgreicher Trefferbestimmung aktualisieren.
+    this.reference = this.prev || g; this.refFull = cur; this.state = 'armed';
+    const dart = { id: ++this.dartSeq, tip: loc.tip, flight: loc.flight, label: res.label, unsure: loc.unsure };
+    Object.assign(res, { cam: { x: loc.tip.x, y: loc.tip.y }, flight: loc.flight, confidence: loc.conf, source: loc.source, unsure: loc.unsure, dartId: dart.id, D: loc.D, ext: loc.ext, illumination: { ...this.motion.lastDiffMetrics } });
+    // Der Treffer wird sofort angezeigt; JPEG-Erzeugung für den Trainings-Export läuft parallel.
+    res.trainingImagePromise = this.captureTrainingFrame().catch(() => null);
+    this.turnDarts.push(dart); this.drawMarks();
+    const n = this.turnDarts.length;
+    if (n >= tn.darts) { this.turnComplete = true; this.setStatus(`${res.label}${loc.unsure ? ' (unsicher)' : ''} – ${tn.darts}/${tn.darts} erkannt, Runde automatisch beendet`); this.emit('turn-complete', { darts: this.turnDarts.slice() }); }
+    else this.setStatus(`${res.label}${loc.unsure ? ' (unsicher)' : ''} – Dart ${n}/${tn.darts}`);
+    if (loc.frontal) console.log('[Erkennung] Kamera schaut fast senkrecht aufs Board (Blickwinkel unter 20°) – die Spitze ist verdeckt und unsicher. Kamera seitlich/unten stellen (ab ca. 25–30°) verbessert die Genauigkeit.');
+    this.emitTurn();
+    this.emit('throw', res);
+    this.feedback.show(res, final => this.submit(final), verdict => this.emit('verification', { verdict, res }));
+  }
+
+  submit(res) {
+    const dart = this.turnDarts.find(x => x.id === res.dartId);               // Korrektur im Popup -> Beschriftung am Bild aktualisieren
+    if (dart && dart.label !== res.label) { dart.label = res.label; dart.unsure = false; this.drawMarks(); }
+    this.emit('hit', res);
+    if (typeof this.cfg.onHit === 'function') return this.cfg.onHit(res);
+  }
+
+  destroy() {
+    this.stopDetection();
+    this.feedback?.destroy(); this.statusEl?.remove(); this.gridCvs?.remove(); this.markCvs?.remove();
+  }
+}
+
+/* ================= Peer-to-Peer Signalisierungs-Empfänger (WebRTC) ================= */
+class StreamReceiver {
+  constructor(deps, code, onStream, onStatus) {
+    this.deps = deps;
+    this.code = String(code).replace(/\D/g, '');
+    this.onStream = onStream;
+    this.onStatus = onStatus;
+    this.pc = null;
+    this.signalingRef = deps.fs.doc(deps.db, "signaling", this.code);
+    this.unsub = null;
+    this.processedCandidates = new Set();
+    this.iceQueue = [];
+    this.iceBuffer = [];
+    this.iceTimer = null;
+  }
+
+  start() {
+    this.onStatus('Warte auf Handy-Verbindung...');
     
+    const rtcConfig = {
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+        { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' }
+      ]
+    };
+
+    if (this.pc) this.pc.close();
+    this.pc = new this.deps.RTCPeerConnection(rtcConfig);
+
+    this.pc.ontrack = event => {
+      const remoteStream = event.streams[0] || new MediaStream([event.track]);
+      this.onStream(remoteStream);
+      this.onStatus('Stream empfangen');
+    };
+
+    this.pc.oniceconnectionstatechange = () => {
+      this.onStatus(`Netzwerk: ${this.pc.iceConnectionState}`);
+    };
+
+    this.pc.onicecandidate = event => {
+      if (event.candidate) {
+        this.iceBuffer.push(JSON.stringify(event.candidate));
+        if (!this.iceTimer) {
+          this.iceTimer = setTimeout(async () => {
+            const batch = [...this.iceBuffer];
+            this.iceBuffer = [];
+            this.iceTimer = null;
+            if (batch.length > 0) {
+              await this.deps.fs.setDoc(this.signalingRef, {
+                hubIceCandidates: this.deps.fs.arrayUnion(...batch)
+              }, { merge: true }).catch(() => {});
+            }
+          }, 500);
+        }
+      }
+    };
+
+    this.unsub = this.deps.fs.onSnapshot(this.signalingRef, async snapshot => {
+      const data = snapshot.data();
+      if (!data) return;
+
+      if (data.offer && this.pc && !this.pc.currentRemoteDescription) {
+        this.onStatus('Offer empfangen, verbinde...');
+        const offerObj = JSON.parse(data.offer);
+        await this.pc.setRemoteDescription(new RTCSessionDescription(offerObj));
+
+        const answer = await this.pc.createAnswer();
+        await this.pc.setLocalDescription(answer);
+
+        await this.deps.fs.setDoc(this.signalingRef, {
+          answer: JSON.stringify({ type: answer.type, sdp: answer.sdp }),
+          updatedAt: new Date().toISOString()
+        }, { merge: true }).catch(() => {});
+
+        while (this.iceQueue.length > 0) {
+          await this.pc.addIceCandidate(this.iceQueue.shift()).catch(() => {});
+        }
+      }
+
+      if (data.cameraIceCandidates && Array.isArray(data.cameraIceCandidates)) {
+        for (const candidateStr of data.cameraIceCandidates) {
+          if (!this.processedCandidates.has(candidateStr)) {
+            this.processedCandidates.add(candidateStr);
+            try {
+              const candidate = new RTCIceCandidate(JSON.parse(candidateStr));
+              if (this.pc.remoteDescription && this.pc.remoteDescription.type) {
+                await this.pc.addIceCandidate(candidate);
+              } else {
+                this.iceQueue.push(candidate);
+              }
+            } catch (e) {}
+          }
+        }
+      }
+    }, () => this.onStatus('Netzwerk-Fehler bei Signalisierung'));
+  }
+
+  stop() {
+    if (this.iceTimer) { clearTimeout(this.iceTimer); this.iceTimer = null; }
+    if (this.unsub) this.unsub();
+    if (this.pc) this.pc.close();
+  }
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+    const $ = id => document.getElementById(id);
+    const dot = $('status-dot'), statusEl = $('calibration-status'), list = $('throw-list'), totalEl = $('throw-total');
+    let total = 0, gridOn = true, turnSum = 0;
+    const ACC_KEY = 'dartly_detection_accuracy_v1';
+    let accuracy = { correct: 0, incorrect: 0 };
+    try { accuracy = { ...accuracy, ...JSON.parse(localStorage.getItem(ACC_KEY) || '{}') }; } catch (_) {}
+    const paintAccuracy = () => {
+        const judged = accuracy.correct + accuracy.incorrect;
+        $('accuracy-percent').textContent = judged ? `${Math.round(100 * accuracy.correct / judged)} %` : '—';
+        $('accuracy-counts').textContent = judged ? `Richtig ${accuracy.correct} · Falsch ${accuracy.incorrect} · bewertet ${judged}` : 'Noch keine Würfe bewertet';
+    };
+    paintAccuracy();
+    const openTrainingDb = () => new Promise((resolve, reject) => {
+        if (!('indexedDB' in window)) return reject(new Error('IndexedDB wird von diesem Browser nicht unterstützt.'));
+        const req = indexedDB.open('dartly_training_samples', 1);
+        req.onupgradeneeded = () => { if (!req.result.objectStoreNames.contains('examples')) req.result.createObjectStore('examples', { keyPath: 'id' }); };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error || new Error('Lokaler Trainingsspeicher konnte nicht geöffnet werden.'));
+    });
+    const trainingDb = openTrainingDb();
+    const updateTrainingCount = async () => {
+        try {
+            const db = await trainingDb, tx = db.transaction('examples', 'readonly'), req = tx.objectStore('examples').count();
+            req.onsuccess = () => { $('training-count').textContent = `${req.result} Trainingsbeispiele · lokal gespeichert`; };
+        } catch (e) { $('training-count').textContent = 'Lokaler Trainingsspeicher nicht verfügbar'; }
+    };
+    const saveTrainingExample = async ({ verdict, res }) => {
+        const db = await trainingDb;
+        let trainingImage = res.trainingImage || null;
+        if (!trainingImage && res.trainingImagePromise) trainingImage = await res.trainingImagePromise;
+        const example = {
+            id: crypto.randomUUID(), judgedAt: new Date().toISOString(), verdict: verdict ? 'richtig' : 'falsch',
+            prediction: { label: res.corrected ? (res.original || null) : res.label, points: res.corrected ? null : res.points, confidence: res.confidence, source: res.source, unsure: !!res.unsure },
+            groundTruth: verdict ? { label: res.label, points: res.points, segment: res.segment, multiplier: res.multiplier } : (res.corrected ? { label: res.label, points: res.points, segment: res.segment, multiplier: res.multiplier } : null),
+            errorType: verdict ? null : (res.corrected ? 'score_mismatch_corrected' : 'false_or_unlabeled_detection'),
+            geometry: { board: res.board, camera: res.cam, flight: res.flight, dartAngle: res.D, extension: res.ext },
+            lighting: res.illumination || null, image: trainingImage,
+        };
+        await new Promise((resolve, reject) => {
+            const tx = db.transaction('examples', 'readwrite');
+            tx.objectStore('examples').put(example);
+            tx.oncomplete = resolve; tx.onerror = () => reject(tx.error || new Error('Trainingsbeispiel konnte nicht gespeichert werden.'));
+        });
+        await updateTrainingCount();
+    };
+    const blobToDataUrl = blob => new Promise((resolve, reject) => {
+        if (!blob) return resolve(null);
+        const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = () => reject(reader.error); reader.readAsDataURL(blob);
+    });
+    const exportTrainingData = async () => {
+        const db = await trainingDb;
+        const records = await new Promise((resolve, reject) => {
+            const req = db.transaction('examples', 'readonly').objectStore('examples').getAll();
+            req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
+        });
+        const evaluations = await Promise.all(records.map(async ({ image, ...record }) => ({ ...record, imageDataUrl: await blobToDataUrl(image) })));
+        const payload = { format: 'dartly-local-training-v1', exportedAt: new Date().toISOString(), count: evaluations.length, evaluations };
+        const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }));
+        const a = document.createElement('a'); a.href = url; a.download = `dartly-training-${new Date().toISOString().slice(0, 10)}.json`; a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 30000);
+        statusEl.textContent = `${evaluations.length} Trainingsbeispiele exportiert`;
+    };
+    updateTrainingCount();
+
+    const engine = new AutoDartsEngine({
+        container: document.querySelector('.camera-wrapper'),
+        video: $('webcam'),
+        onHit: r => {
+            total += r.points; turnSum += r.points; totalEl.textContent = total;
+            const row = document.createElement('div'); row.className = 'throw-row';
+            row.innerHTML = `<span>${r.label}${r.corrected ? ' <small>(korrigiert)</small>' : ''}</span><span>${r.points}</span>`;
+            list.prepend(row);
+        },
+    });
+    window.dartEngine = engine;
+    await engine.start();
+    engine.on('verification', event => {
+        const { verdict } = event;
+        accuracy[verdict ? 'correct' : 'incorrect']++;
+        localStorage.setItem(ACC_KEY, JSON.stringify(accuracy));
+        paintAccuracy();
+        saveTrainingExample(event).catch(e => { console.warn('[Training] Beispiel konnte lokal nicht gespeichert werden:', e); statusEl.textContent = 'Bewertung gezählt; Trainingsbild konnte nicht lokal gespeichert werden'; });
+    });
+    $('training-export').addEventListener('click', () => exportTrainingData().catch(e => { console.error('[Training] Export fehlgeschlagen:', e); statusEl.textContent = `Export fehlgeschlagen: ${e.message}`; }));
+    $('accuracy-reset').addEventListener('click', () => {
+        accuracy = { correct: 0, incorrect: 0 };
+        localStorage.setItem(ACC_KEY, JSON.stringify(accuracy));
+        paintAccuracy();
+    });
+
+    // Video Player Controls Logic
+    const vidEl = $('webcam');
+    const controlsBar = $('video-controls-bar');
+    const playBtn = $('vid-play-btn');
+    const seekSlider = $('vid-seek');
+    const timeDisplay = $('vid-time');
+    const screenshotBtn = $('vid-screenshot-btn');
+
+    playBtn.addEventListener('click', () => {
+        if (vidEl.paused) { vidEl.play(); playBtn.innerHTML = ICON.pause + 'Pause'; }
+        else { vidEl.pause(); playBtn.innerHTML = ICON.play + 'Play'; }
+    });
+
+    vidEl.addEventListener('timeupdate', () => {
+        if (!vidEl.duration) return;
+        seekSlider.value = (vidEl.currentTime / vidEl.duration) * 100;
+        const curMin = Math.floor(vidEl.currentTime / 60), curSec = Math.floor(vidEl.currentTime % 60);
+        const durMin = Math.floor(vidEl.duration / 60), durSec = Math.floor(vidEl.duration % 60);
+        timeDisplay.textContent = `${curMin}:${curSec < 10 ? '0':''}${curSec} / ${durMin}:${durSec < 10 ? '0':''}${durSec}`;
+    });
+
+    seekSlider.addEventListener('input', () => {
+        if (!vidEl.duration) return;
+        vidEl.currentTime = (seekSlider.value / 100) * vidEl.duration;
+    });
+
+    // Einzelfunktion für Screenshot (Screenshot-Button Logik)
+    screenshotBtn.addEventListener('click', () => {
+        if (!vidEl.videoWidth || !vidEl.videoHeight) return;
+        const canvas = document.createElement('canvas');
+        canvas.width = vidEl.videoWidth;
+        canvas.height = vidEl.videoHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(vidEl, 0, 0, canvas.width, canvas.height);
+        
+        // Als Download anbieten oder anzeigen
+        const dataUrl = canvas.toDataURL('image/png');
+        const a = document.createElement('a');
+        a.href = dataUrl;
+        a.download = `dartly-screenshot-${Math.floor(Date.now() / 1000)}.png`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        console.log('[Frame] Bild gespeichert');
+    });
+
+    let receiver = null;
+    const generateCode = () => Math.floor(100000 + Math.random() * 900000).toString();
+    
+    const initPeerConnection = async () => {
+      const code = generateCode();
+      document.querySelector('.stream-code-box').hidden = false;
+      $('pairing-code').textContent = code;
+      
+      const qrContainer = $('qrcode');
+      qrContainer.innerHTML = '';
+      try { new QRCode(qrContainer, { text: code, width: 90, height: 90 }); }
+      catch (e) { console.warn('[QR] Bibliothek nicht verfügbar – nur der Code wird angezeigt:', e.message); }
+
+      try {
+        const { db } = await import('./firebase_config.js');
+        const m = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
+        const deps = { db, fs: { doc: m.doc, setDoc: m.setDoc, onSnapshot: m.onSnapshot, arrayUnion: m.arrayUnion }, RTCPeerConnection: window.RTCPeerConnection };
+        
+        if (receiver) receiver.stop();
+        receiver = new StreamReceiver(deps, code, stream => {
+          controlsBar.style.display = 'none';
+          document.querySelector('.stream-code-box').hidden = true;
+          engine.loadRemoteStream(stream);
+        }, msg => statusEl.textContent = msg);
+        receiver.start();
+      } catch (e) {
+        console.error("Firebase Fehler:", e);
+        statusEl.textContent = 'Firebase Verbindung fehlgeschlagen';
+      }
+    };
+
+    $('btn-new-code').addEventListener('click', initPeerConnection);
+    initPeerConnection();
+
+    loadOpenCV(engine.cfg.opencvUrl).then(() => console.log('[OpenCV] bereit'), e => console.warn('[OpenCV] Fehler: ' + e.message));
+
+    const syncDot = () => dot.classList.toggle('calibrated', !!engine.H);
+    engine.on('status', t => { statusEl.textContent = t; syncDot(); });
+    engine.on('calibrated', () => { syncDot(); engine.showGrid(gridOn); });
+
+    $('btn-reset').addEventListener('click', async () => { engine.clearCalibration(); engine.showGrid(false); syncDot(); await engine.calibrate(); });
+    $('btn-manual').addEventListener('click', () => engine.calibrate());
+    $('btn-auto').addEventListener('click', () => engine.autoCalibrate());
+    $('btn-grid').addEventListener('click', () => { gridOn = !gridOn; engine.showGrid(gridOn); });
+
+
+    // ---------- Screenshot laden ----------
+    $('btn-upload-img').addEventListener('click', () => $('image-upload-input').click());
+    $('image-upload-input').addEventListener('change', e => {
+        const file = e.target.files[0]; if (!file) return;
+        e.target.value = '';
+        const img = new Image();
+        img.onload = () => { controlsBar.style.display = 'none'; engine.loadScreenshot(img); $('btn-live').hidden = false; syncDot(); engine.showGrid(gridOn && !!engine.H); };
+        img.onerror = () => { statusEl.textContent = 'Bild konnte nicht geladen werden'; };
+        img.src = URL.createObjectURL(file);
+    });
+    $('btn-live').addEventListener('click', () => { engine.exitScreenshot(); $('btn-live').hidden = true; syncDot(); engine.showGrid(gridOn && !!engine.H); });
+    engine.on('screenshot-exit', () => { $('btn-live').hidden = true; });
+    engine.on('media-ready', () => { syncDot(); engine.showGrid(gridOn && !!engine.H); });
+
+    // ---------- Aufnahme-Anzeige + Markierungen ----------
+    const renderPips = (n, max, complete) => {
+        $('turn-pips').innerHTML = Array.from({ length: max }, (_, i) => `<span class="dart-pip${i < n ? ' on' : ''}"></span>`).join('');
+        $('turn-text').textContent = complete ? `${max}/${max} Darts erkannt – Runde automatisch beendet` : (n ? `${n} von ${max} Darts erkannt` : `Bereit – bis zu ${max} Darts werfen`);
+    };
+    renderPips(0, engine.turnLimit, false);
+    engine.on('turn-update', s => renderPips(s.count, s.max, s.complete));
+    engine.on('turn-complete', () => {
+        if (!engine.isVideoFileMode) return; // Livebild bleibt aktiv, damit Dart-Entnahme die nächste Runde automatisch startet.
+        vidEl.pause();
+        playBtn.innerHTML = ICON.play + 'Weiter';
+        engine.setStatus(`${engine.turnLimit}/${engine.turnLimit} Darts – Videoanalyse automatisch pausiert`);
+    });
+    vidEl.addEventListener('play', () => { if (engine.isVideoFileMode) playBtn.innerHTML = ICON.pause + 'Pause'; });
+    vidEl.addEventListener('pause', () => { if (engine.isVideoFileMode) playBtn.innerHTML = ICON.play + 'Weiter'; });
+    engine.on('turn-reset', ({ darts }) => {
+        if (darts.length) { const sep = document.createElement('div'); sep.className = 'throw-sep'; sep.textContent = `Aufnahme beendet · ${turnSum} Punkte`; list.prepend(sep); }
+        turnSum = 0;
+    });
+    try { Object.assign(engine.cfg.marks, JSON.parse(localStorage.getItem('dartly_marks') || '{}')); } catch (_) { /* ignorieren */ }
+    ['tip', 'flight', 'label'].forEach(k => {
+        const cb = $('mk-' + k); cb.checked = !!engine.cfg.marks[k];
+        cb.addEventListener('change', () => { engine.cfg.marks[k] = cb.checked; localStorage.setItem('dartly_marks', JSON.stringify(engine.cfg.marks)); engine.drawMarks(); });
+    });
+
+    // ---------- Auto-Genauigkeit ----------
+    const LV = { 1: ['Minimal', 'sehr schnell · grobes Raster, ca. ±1–2 mm'], 2: ['Niedrig', 'schnell · ca. ±0,5 mm'], 3: ['Standard', 'ausgewogen · ca. ±0,2–0,4 mm'], 4: ['Hoch', 'genauer · ca. ±0,15–0,3 mm, strengere Prüfung'], 5: ['Maximal', 'bis ca. ±0,1–0,2 mm bei ≥ 2K-Bild, strengste Prüfung'] };
+    const lvEl = $('auto-level');
+    const setLv = v => { engine.cfg.autoLevel = v; $('auto-level-name').textContent = LV[v][0]; $('auto-level-hint').textContent = LV[v][1] + ' (Testwerte an Probebildern; reale Genauigkeit hängt von Auflösung und Linse ab)'; localStorage.setItem('dartly_auto_level', v); };
+    lvEl.value = localStorage.getItem('dartly_auto_level') || 3; setLv(+lvEl.value);
+    lvEl.addEventListener('input', () => setLv(+lvEl.value));
+
+    $('btn-upload-vid').addEventListener('click', () => $('video-upload-input').click());
+    $('video-upload-input').addEventListener('change', e => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const fileUrl = URL.createObjectURL(file);
+        controlsBar.style.display = 'flex';
+        engine.loadVideoFile(fileUrl);
+        syncDot();
+        engine.showGrid(gridOn && !!engine.H);
+    });
+});
+    </script>
+</body>
+</html>
