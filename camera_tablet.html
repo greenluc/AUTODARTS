@@ -180,18 +180,6 @@
             justify-content: center;
             min-height: 0;
         }
-        .detection-debug {
-            position: absolute; z-index: 20; top: 8px; right: 8px; width: min(210px, 58%);
-            padding: 8px 10px; border: 1px solid rgba(255,255,255,.18); border-radius: 9px;
-            background: rgba(5,8,12,.82); color: #fff; font: 11px/1.4 system-ui,sans-serif;
-            pointer-events: none; backdrop-filter: blur(4px);
-        }
-        .detection-debug strong { display:block; color:#00ff88; font-size:11px; margin-bottom:2px; }
-        .detection-debug canvas { display:block; width:100%; height:auto; margin:5px 0; border:1px solid rgba(255,255,255,.18); image-rendering:pixelated; }
-        .diff-meter { position:relative; height:6px; margin:7px 0 2px; border-radius:5px; background:rgba(255,255,255,.14); overflow:visible; }
-        .diff-meter i { display:block; height:100%; width:0; border-radius:5px; background:#00ff88; }
-        .diff-meter b { position:absolute; top:-2px; width:2px; height:10px; background:#fff; transform:translateX(-50%); }
-        .diff-legend { display:flex; justify-content:space-between; color:rgba(255,255,255,.72); font-size:9px; }
 
         video#webcam, img#screenshot-preview {
             display: block;
@@ -360,15 +348,6 @@
             <!-- Kamera & Video Viewport -->
             <div class="camera-wrapper">
                 <video id="webcam" autoplay playsinline muted></video>
-                <div class="detection-debug" id="detection-debug" hidden>
-                    <strong>Differenzbild · Live</strong>
-                    <canvas id="diff-preview" width="160" height="90" aria-label="Live-Differenzbild; grün markiert geänderte Pixel"></canvas>
-                    <small>Grün = geänderte Bildpunkte</small>
-                    <span id="debug-state">Warte auf Bild</span><br><span id="debug-diff">Änderung: —</span>
-                    <div class="diff-meter" aria-hidden="true"><i id="diff-meter-fill"></i><b style="left:25%"></b><b style="left:60%;background:#ffb454"></b></div>
-                    <div class="diff-legend"><span>0 %</span><span>5 %</span><span>12 %</span><span>20 %</span></div>
-                    <small>5 % Orientierung · Handfilter ab 12 %</small>
-                </div>
                 <input type="file" id="video-upload-input" accept="video/*" style="display: none;">
                 <input type="file" id="image-upload-input" accept="image/*" style="display: none;">
             </div>
@@ -408,12 +387,6 @@
                     <label><input type="checkbox" id="mk-tip"> Dartspitze (roter Punkt)</label>
                     <label><input type="checkbox" id="mk-flight"> Flight markieren</label>
                     <label><input type="checkbox" id="mk-label"> Beschriftung</label>
-                </div>
-                <div class="level-row">
-                    <div class="level-head"><span><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>Auto-Genauigkeit</span><b id="auto-level-name">Standard</b></div>
-                    <input type="range" id="auto-level" min="1" max="5" step="1" value="3">
-                    <div class="level-scale"><span>Minimal</span><span>Maximal</span></div>
-                    <div class="level-hint" id="auto-level-hint"></div>
                 </div>
             </details>
 
@@ -496,15 +469,15 @@ const DEFAULTS = {
   opencvUrl: 'https://docs.opencv.org/4.x/opencv.js',
   radii: DEFAULT_RADII,
   motion: {
-    width: 277, // ca. 3x Gesamtpixelzahl gegenüber 160px Arbeitsbreite
-    fps: 5,
-    pixelThreshold: 8,
-    startRatio: 0.0007,
-    refRatio: 0.00025,            // Änderung gegenüber der Referenz, ab der geprüft wird (kleine, ruhig einschlagende Darts)
-    stillRatio: 0.00045,
+    width: 160,
+    fps: 15,
+    pixelThreshold: 10,
+    startRatio: 0.0008,
+    refRatio: 0.0002,            // Schon kleine Boardänderungen zur genaueren Prüfung heranziehen
+    stillRatio: 0.0008,
     stillFrames: 3,
-    maxChangeRatio: 0.25,
-    minBlobPixels: 2,
+    maxChangeRatio: 0.12,
+    minBlobPixels: 3,
     roiRadius: 125,
     maxScoreRadius: 115,
   },
@@ -517,7 +490,7 @@ const DEFAULTS = {
     heuristic: 'towardBoardCenter',
   },
   targetMm: 0.2,
-  autoLevel: 3,                  // Auto-Kalibrierung: 1 (minimal) … 5 (maximal)
+  autoLevel: 2,                  // feste, zügige niedrig-mittlere Auto-Kalibrierung
   turn: { darts: 3, emptyRatio: 0.006 },   // Leere Boardfläche nach dem Herausziehen automatisch erkennen
   marks: { tip: true, flight: true, label: true },   // Markierungen: Spitze (roter Punkt), Flight (blauer Ring), Beschriftung
   feedbackMs: 7000,
@@ -700,9 +673,8 @@ function homog4(src, dst) {
   return [[h[0], h[1], h[2]], [h[3], h[4], h[5]], [h[6], h[7], 1]];
 }
 
-/** Auto-Genauigkeit: 1 = minimal/schnell … 5 = maximal. Steuert Arbeitsauflösung, Subpixel-Aufwand und wie streng das Ergebnis geprüft wird. */
-/** Auto-Genauigkeit: 1 = minimal/schnell … 5 = maximal. Steuert Arbeitsauflösung, Subpixel-Aufwand und wie streng das Ergebnis geprüft wird.
- *  Toleranz: ab 30 % Muster-Treffer wird immer ein Vorschlag gezeigt (bei weniger als minFp als „unsicher“ markiert). */
+/** Feste Auto-Kalibrierung: niedrig-mittlere Stufe mit robuster Subpixel-Nachkorrektur.
+ * Toleranz: ab 30 % Muster-Treffer wird ein Vorschlag gezeigt; schwache Muster bleiben als unsicher markiert. */
 const AUTO_LEVELS = {
   1: { name: 'Minimal',  widths: [400],           minFp: 0.4,  sub: null, cross: false },
   2: { name: 'Niedrig',  widths: [400, 560],      minFp: 0.4,  sub: { maxW: 800,  iters: 3,  ring: 90 },  cross: true },
@@ -1089,7 +1061,7 @@ class AutoBoardDetector {
   static async detect(media, cfg, progress = () => {}) {
     const srcW = media.videoWidth || media.naturalWidth, srcH = media.videoHeight || media.naturalHeight;
     if (!srcW || !srcH) throw new Error('kein Bild vorhanden');
-    const level = AUTO_LEVELS[cfg.autoLevel] || AUTO_LEVELS[3], pause = () => new Promise(r => setTimeout(r, 0));
+    const level = AUTO_LEVELS[2], pause = () => new Promise(r => setTimeout(r, 0));
     progress('OpenCV wird geladen (einmalig) …');
     const { cv } = await loadOpenCV(cfg.opencvUrl);
     const t0 = performance.now(); let best = null;
@@ -1484,7 +1456,9 @@ class MotionDetector {
     for (let i = 0; i < a.length; i++) if (!this.roi || this.roi[i]) noise[Math.min(255, Math.abs((b[i] - a[i]) - offset))]++;
     sum = 0; let noiseMedian = 0;
     for (let k = 0; k < noise.length; k++) { sum += noise[k]; if (sum >= samples / 2) { noiseMedian = k; break; } }
-    const threshold = Math.min(24, Math.max(this.cfg.pixelThreshold, Math.round(noiseMedian * 1.5 + 3)));
+    // Empfindlicher Kandidatenfilter: kleine Kontraständerungen bleiben sichtbar,
+    // die adaptive Rauschkomponente schützt vor flächigem Sensor-/Belichtungsrauschen.
+    const threshold = Math.min(48, Math.max(this.cfg.pixelThreshold, noiseMedian * 3 + 3));
     for (let i = 0; i < a.length; i++) if ((!this.roi || this.roi[i]) && Math.abs((b[i] - a[i]) - offset) > threshold) { if (m) m[i] = 1; n++; }
     this.lastDiffMetrics = { offset, noiseMedian, threshold };
     return { mask: m, count: n, ratio: n / (this.roiCount || a.length) };
@@ -1505,18 +1479,17 @@ class MotionDetector {
           if (mask[q] && !seen[q]) { seen[q] = 1; stack.push(q); }
         }
       }
-      if (pix.length >= Math.max(2, this.cfg.minBlobPixels)) out.push(pix);
+      if (pix.length >= this.cfg.minBlobPixels) out.push(pix);
     }
     return out.sort((a, b) => b.length - a.length);
   }
   dartLike(blob) {
-    if (!blob || blob.length < 3) return false;
+    if (!blob || blob.length < Math.max(3, this.cfg.minBlobPixels || 3)) return false;
     let x0 = this.w, y0 = this.h, x1 = -1, y1 = -1;
     for (const p of blob) { const x = p % this.w, y = (p / this.w) | 0; x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
     const bw = x1 - x0 + 1, bh = y1 - y0 + 1, longSide = Math.max(bw, bh), shortSide = Math.max(1, Math.min(bw, bh));
     // Ein echter Dart erzeugt meist eine längliche Änderung; kleine, kompakte Schatten-/Rauschflecken ignorieren.
-    // Sensitivität für dünne, teilweise verdeckte Darts erhöhen; kompakte Pixelcluster bleiben ausgeschlossen.
-    return longSide >= 4 && longSide / shortSide >= 1.2 && blob.length >= Math.max(3, this.cfg.minBlobPixels);
+    return longSide >= 3 && longSide / shortSide >= 1.2;
   }
 }
 
@@ -2031,6 +2004,7 @@ class AutoDartsEngine {
   /* ---------------------------------------------------------------- Erkennung */
 
   resetTurnState() {
+    this.turnPauseUntil = 0; this.pendingEndTurn = null;
     this.turnDarts = []; this.turnComplete = false; this.shotPoint = null; this.emptyRef = null; this.refFull = null;
     this.clearMarks(); this.emitTurn();
   }
@@ -2040,8 +2014,6 @@ class AutoDartsEngine {
 
   beginDetection() {
     if (!this.camSize) return;
-    const debugPanel = document.getElementById('detection-debug');
-    if (debugPanel) debugPanel.hidden = false;
     this.running = true; this.state = 'init'; this.still = 0; this.prev = null; this.reference = null;
     this.resetTurnState();
     const mediaSource = this.video;
@@ -2078,40 +2050,13 @@ class AutoDartsEngine {
     this.setStatus('Neue Aufnahme – Bereit');
   }
 
-  drawDiffPreview(mask) {
-    const canvas = document.getElementById('diff-preview');
-    if (!canvas || !this.motion.w || !this.motion.h) return;
-    const w = this.motion.w, h = this.motion.h;
-    if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
-    const ctx = canvas.getContext('2d'); if (!ctx) return;
-    const image = ctx.createImageData(w, h), px = image.data;
-    for (let i = 0, j = 0; i < w * h; i++, j += 4) {
-      const changed = !!mask?.[i];
-      px[j] = changed ? 0 : 12; px[j + 1] = changed ? 255 : 16; px[j + 2] = changed ? 136 : 22; px[j + 3] = 255;
-    }
-    ctx.putImageData(image, 0, 0);
-  }
-
   tick() {
     const mediaSource = this.video;
     if (!mediaSource || mediaSource.readyState < 2 || (!this.motion.roi && !this.prepareRoi())) return;
     const g = this.motion.grab(mediaSource), m = this.cfg.motion;
-    const debugPanel = document.getElementById('detection-debug');
-    const debugNow = !!debugPanel && !debugPanel.hidden && ((this.debugTick = (this.debugTick || 0) + 1) % 3 === 0);
     const frameDiff = this.prev ? this.motion.diff(g, this.prev, { includeMask: false }) : null;
     const ratio = frameDiff?.ratio || 0;
     const refRatio = this.reference ? this.motion.diff(g, this.reference, { includeMask: false }).ratio : 0;
-    const boardRef = this.emptyRef || this.reference;
-    const boardDiff = debugNow && boardRef ? this.motion.diff(g, boardRef, { includeMask: true }) : null;
-    if (debugNow) {
-      const stateEl = document.getElementById('debug-state'), diffEl = document.getElementById('debug-diff');
-      if (stateEl) stateEl.textContent = `Status: ${this.state === 'armed' ? 'bereit' : this.state === 'moving' ? 'Bewegung / Schatten prüfen' : this.state === 'busy' ? 'Bild wird geprüft' : this.state}`;
-      const lm = this.motion.lastDiffMetrics || {};
-      if (diffEl) diffEl.textContent = `Frame ${((ratio || 0) * 100).toFixed(2)} % · Board ${(boardDiff?.ratio * 100 || 0).toFixed(2)} % · Licht ${lm.offset ?? 0} · Rauschen ${lm.noiseMedian ?? 0} · Schwelle ${lm.threshold ?? m.pixelThreshold}`;
-      this.drawDiffPreview(boardDiff?.mask || null);
-      const fill = document.getElementById('diff-meter-fill');
-      if (fill) fill.style.width = `${Math.min(100, ((boardDiff?.ratio || 0) / 0.2) * 100)}%`;
-    }
     this.prev = g;
     switch (this.state) {
       case 'init':
@@ -2128,7 +2073,7 @@ class AutoDartsEngine {
       }
       case 'moving':
         this.still = ratio < m.stillRatio ? this.still + 1 : 0;
-        if (this.still >= m.stillFrames) this.settled(g).catch(err => { console.error('[Erkennung] Auswertung fehlgeschlagen:', err); this.state = 'armed'; this.still = 0; this.setStatus('Erkennungsfehler – erneut bereit'); });
+        if (this.still >= m.stillFrames) this.settled(g);
         break;
     }
   }
@@ -2173,6 +2118,7 @@ class AutoDartsEngine {
 
   endTurn(g, cur, reason) {
     const darts = this.turnDarts.slice();
+    this.turnPauseUntil = 0; this.pendingEndTurn = null;
     this.turnDarts = []; this.turnComplete = false; this.shotPoint = null;
     this.reference = g; this.emptyRef = g; this.refFull = cur; this.state = 'armed';
     this.clearMarks();
@@ -2203,17 +2149,17 @@ class AutoDartsEngine {
     const cur = this.motion.grabFull(this.video);
     if (this.turnDarts.length && this.emptyRef) {                              // Board wieder leer = Darts gezogen = Aufnahme beendet
       const e = this.motion.diff(g, this.emptyRef);
-      if (e.ratio < tn.emptyRatio) { this.endTurn(g, cur, 'removed'); return; }
+      if (e.ratio < tn.emptyRatio) {
+        if (this.turnComplete && Date.now() < this.turnPauseUntil) {
+          this.pendingEndTurn = { g, cur };
+          this.reference = g; this.refFull = cur; this.state = 'armed';
+          this.setStatus(`Board leer – Runde startet nach der Dartziehpause`); return;
+        }
+        this.endTurn(g, cur, 'removed'); return;
+      }
     }
     const blobs = this.motion.blobs(d.mask).filter(blob => this.motion.dartLike(blob));
-    if (!blobs.length) {
-      // Wichtig: Bei erfolgloser Blob-Erkennung die Referenz NICHT auf das aktuelle Bild setzen.
-      // Sonst wird eine noch nicht erkannte Dart-Änderung in der Referenz "absorbiert"
-      // und verschwindet beim nächsten Versuch aus der Differenz zur Referenz.
-      this.state = 'armed';
-      this.setStatus(this.turnComplete ? 'Aufnahme beendet – bitte Darts ziehen' : 'Bereit – Änderung wird weiter geprüft');
-      return;
-    }
+    if (!blobs.length) { this.reference = g; this.refFull = cur; this.state = 'armed'; this.setStatus(this.turnComplete ? 'Aufnahme beendet – bitte Darts ziehen' : 'Bereit'); return; }
 
     if (this.turnDarts.length && this.isRemoval(blobs[0], g)) {                // einzelner Dart herausgezogen
       const mo = this.motion, sx = this.camSize.w / mo.w, sy = this.camSize.h / mo.h; let cx = 0, cy = 0;
@@ -2232,24 +2178,16 @@ class AutoDartsEngine {
     const b = Homography.apply(this.H, loc.tip.x, loc.tip.y);
     const res = Scoring.fromBoard(b.x, b.y, this.cfg.radii);
 
-    if (!isFinite(res.board.r) || res.board.r > m.maxScoreRadius) {
-      // Außerhalb des gültigen Boards: Referenz behalten, damit die Änderung erneut
-      // ausgewertet werden kann, statt sie stillschweigend als neuen Ausgangszustand zu übernehmen.
-      this.state = 'armed';
-      this.setStatus('Treffer außerhalb des Boards – Änderung bleibt zur Prüfung');
-      this.emit('detect-failed', { tip: loc.tip });
-      return;
-    }
-
-    // Referenz erst nach erfolgreicher Trefferbestimmung aktualisieren.
     this.reference = this.prev || g; this.refFull = cur; this.state = 'armed';
+    if (!isFinite(res.board.r) || res.board.r > m.maxScoreRadius) { this.setStatus('Bereit'); this.emit('detect-failed', { tip: loc.tip }); return; }
+
     const dart = { id: ++this.dartSeq, tip: loc.tip, flight: loc.flight, label: res.label, unsure: loc.unsure };
     Object.assign(res, { cam: { x: loc.tip.x, y: loc.tip.y }, flight: loc.flight, confidence: loc.conf, source: loc.source, unsure: loc.unsure, dartId: dart.id, D: loc.D, ext: loc.ext, illumination: { ...this.motion.lastDiffMetrics } });
     // Der Treffer wird sofort angezeigt; JPEG-Erzeugung für den Trainings-Export läuft parallel.
     res.trainingImagePromise = this.captureTrainingFrame().catch(() => null);
     this.turnDarts.push(dart); this.drawMarks();
     const n = this.turnDarts.length;
-    if (n >= tn.darts) { this.turnComplete = true; this.setStatus(`${res.label}${loc.unsure ? ' (unsicher)' : ''} – ${tn.darts}/${tn.darts} erkannt, Runde automatisch beendet`); this.emit('turn-complete', { darts: this.turnDarts.slice() }); }
+    if (n >= tn.darts) { this.turnComplete = true; this.turnPauseUntil = Date.now() + 10000; this.setStatus(`${res.label}${loc.unsure ? ' (unsicher)' : ''} – ${tn.darts}/${tn.darts} erkannt, Runde automatisch beendet`); this.emit('turn-complete', { darts: this.turnDarts.slice() }); }
     else this.setStatus(`${res.label}${loc.unsure ? ' (unsicher)' : ''} – Dart ${n}/${tn.darts}`);
     if (loc.frontal) console.log('[Erkennung] Kamera schaut fast senkrecht aufs Board (Blickwinkel unter 20°) – die Spitze ist verdeckt und unsicher. Kamera seitlich/unten stellen (ab ca. 25–30°) verbessert die Genauigkeit.');
     this.emitTurn();
@@ -2580,15 +2518,30 @@ document.addEventListener('DOMContentLoaded', async () => {
     };
     renderPips(0, engine.turnLimit, false);
     engine.on('turn-update', s => renderPips(s.count, s.max, s.complete));
+    let dartPullTimer = null;
     engine.on('turn-complete', () => {
-        if (!engine.isVideoFileMode) return; // Livebild bleibt aktiv, damit Dart-Entnahme die nächste Runde automatisch startet.
-        vidEl.pause();
-        playBtn.innerHTML = ICON.play + 'Weiter';
-        engine.setStatus(`${engine.turnLimit}/${engine.turnLimit} Darts – Videoanalyse automatisch pausiert`);
+        if (engine.isVideoFileMode) {
+            vidEl.pause();
+            playBtn.innerHTML = ICON.play + 'Weiter';
+        }
+        clearInterval(dartPullTimer);
+        const until = Date.now() + 10000;
+        const updatePause = () => {
+            const seconds = Math.max(0, Math.ceil((until - Date.now()) / 1000));
+            $('turn-text').textContent = seconds ? `3/3 Darts erkannt – ${seconds} s zum Dartziehen` : '3/3 Darts erkannt – warte auf das Herausziehen';
+            if (seconds) engine.setStatus(`${engine.turnLimit}/${engine.turnLimit} Darts – bitte Darts ziehen (${seconds} s)`);
+            else {
+                clearInterval(dartPullTimer); dartPullTimer = null;
+                if (engine.pendingEndTurn) engine.endTurn(engine.pendingEndTurn.g, engine.pendingEndTurn.cur, 'removed-after-pause');
+                else engine.setStatus('Bitte Darts ziehen – die nächste Runde startet automatisch, wenn das Board leer ist.');
+            }
+        };
+        updatePause(); dartPullTimer = setInterval(updatePause, 250);
     });
     vidEl.addEventListener('play', () => { if (engine.isVideoFileMode) playBtn.innerHTML = ICON.pause + 'Pause'; });
     vidEl.addEventListener('pause', () => { if (engine.isVideoFileMode) playBtn.innerHTML = ICON.play + 'Weiter'; });
     engine.on('turn-reset', ({ darts }) => {
+        clearInterval(dartPullTimer); dartPullTimer = null;
         if (darts.length) { const sep = document.createElement('div'); sep.className = 'throw-sep'; sep.textContent = `Aufnahme beendet · ${turnSum} Punkte`; list.prepend(sep); }
         turnSum = 0;
     });
@@ -2598,12 +2551,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         cb.addEventListener('change', () => { engine.cfg.marks[k] = cb.checked; localStorage.setItem('dartly_marks', JSON.stringify(engine.cfg.marks)); engine.drawMarks(); });
     });
 
-    // ---------- Auto-Genauigkeit ----------
-    const LV = { 1: ['Minimal', 'sehr schnell · grobes Raster, ca. ±1–2 mm'], 2: ['Niedrig', 'schnell · ca. ±0,5 mm'], 3: ['Standard', 'ausgewogen · ca. ±0,2–0,4 mm'], 4: ['Hoch', 'genauer · ca. ±0,15–0,3 mm, strengere Prüfung'], 5: ['Maximal', 'bis ca. ±0,1–0,2 mm bei ≥ 2K-Bild, strengste Prüfung'] };
-    const lvEl = $('auto-level');
-    const setLv = v => { engine.cfg.autoLevel = v; $('auto-level-name').textContent = LV[v][0]; $('auto-level-hint').textContent = LV[v][1] + ' (Testwerte an Probebildern; reale Genauigkeit hängt von Auflösung und Linse ab)'; localStorage.setItem('dartly_auto_level', v); };
-    lvEl.value = localStorage.getItem('dartly_auto_level') || 3; setLv(+lvEl.value);
-    lvEl.addEventListener('input', () => setLv(+lvEl.value));
 
     $('btn-upload-vid').addEventListener('click', () => $('video-upload-input').click());
     $('video-upload-input').addEventListener('change', e => {
