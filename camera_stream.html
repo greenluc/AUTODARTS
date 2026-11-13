@@ -19,7 +19,7 @@
   button.secondary { background:rgba(255,255,255,0.1); width:100%; margin-top:8px; font-size:0.95rem; }
   button:disabled { opacity:.45; }
   .row { display:flex; gap:10px; flex-wrap:wrap; margin-top:12px; } .row button { flex:1; min-width:130px; }
-  video { width:100%; aspect-ratio:1 / 1; object-fit:cover; border-radius:0; background:#000; display:block; box-shadow:none; }
+  video { width:100%; border-radius:14px; background:#000; display:block; }
   .chip { display:inline-flex; align-items:center; gap:8px; padding:7px 12px; border-radius:20px; background:rgba(255,255,255,.08); font-weight:600; font-size:.9rem; }
   .dot { width:10px; height:10px; border-radius:50%; background:var(--warn); } .dot.ok { background:var(--accent); box-shadow:0 0 8px var(--accent); } .dot.bad { background:var(--danger); }
   .stats { margin-top:10px; color:var(--gray); font-size:.85rem; line-height:1.6; }
@@ -92,10 +92,9 @@ const $ = id => document.getElementById(id);
 const params = new URLSearchParams(location.search);
 const store = { get: k => { try { return localStorage.getItem(k); } catch (_) { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (_) {} } };
 
-const S = { facing: 'environment', w: 1280, h: 1280, stream: null, track: null, peerConnection: null, wake: null, running: false };
+const S = { facing: 'environment', w: 1280, h: 720, stream: null, track: null, peerConnection: null, wake: null, running: false };
 let lastBytes = 0, lastAt = 0, statTimer = null, html5QrCode = null;
 let signalingDocRef = null, unsubscribeSnapshot = null;
-let qrHandling = false;
 let cameraProcessedCandidates = new Set();
 let camIceQueue = [];
 let camIceBuffer = [];
@@ -105,14 +104,13 @@ const setStatus = (t, kind) => { $('status').textContent = t; $('dot').className
 const showErr = (t, id = 'err') => { $(id).textContent = t || ''; };
 
 async function openCamera(facing, w, h) {
-  const s = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: facing }, width: { ideal: w }, height: { ideal: h }, aspectRatio: { ideal: 1 }, frameRate: { ideal: 30, max: 30 } } });
+  const s = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: facing }, width: { ideal: w }, height: { ideal: h }, frameRate: { ideal: 30, max: 30 } } });
   const t = s.getVideoTracks()[0];
   try { t.contentHint = 'detail'; } catch (_) {}
   return s;
 }
 
 function adopt(stream) {
-  if (!stream || !stream.getVideoTracks || !stream.getVideoTracks()[0]) throw new Error('Keine Videospur von der Kamera erhalten.');
   S.stream = stream; 
   S.track = stream.getVideoTracks()[0]; 
   $('preview').srcObject = stream;
@@ -278,19 +276,12 @@ async function startScanner() {
     await html5QrCode.start(
       { facingMode: "environment" },
       { fps: 10, qrbox: { width: 250, height: 250 } },
-      async (decodedText) => {
-        if (qrHandling) return;
+      (decodedText) => {
         const cleanCode = decodedText.replace(/\D/g, '').slice(0, 6);
         if (cleanCode.length === 6) {
-          qrHandling = true;
           $('code').value = cleanCode;
-          try {
-            // Scanner-Kameraspur erst freigeben, bevor die Stream-Kamera geöffnet wird.
-            await stopScanner();
-            await start();
-          } finally {
-            qrHandling = false;
-          }
+          stopScanner();
+          start();
         }
       },
       () => {}

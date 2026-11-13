@@ -3,9 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dartly Arena - Kamera Kalibrierung (11 Punkte & Raster-Fix)</title>
-    <!-- Google Fonts für das Darts-App Styling -->
+    <title>Dartly Arena - Kamera Empfänger & Video-Analyse</title>
     <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <!-- QR Code Generator Bibliothek -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     
     <style>
         :root {
@@ -132,11 +133,43 @@
             fill: var(--accent);
         }
 
+        .stream-code-box {
+            background: rgba(0, 255, 136, 0.05);
+            border: 1px dashed var(--accent);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .stream-code-val {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 2.2rem;
+            font-weight: 700;
+            color: var(--accent);
+            letter-spacing: 4px;
+        }
+
+        #qrcode {
+            background: #fff;
+            padding: 8px;
+            border-radius: 8px;
+            display: inline-block;
+        }
+
+        #qrcode canvas, #qrcode img {
+            display: block;
+            width: 90px !important;
+            height: 90px !important;
+        }
+
         .camera-wrapper {
             position: relative;
             width: 100%;
-            aspect-ratio: auto;
-            max-height: none;
             background: #000;
             border-radius: 14px;
             overflow: hidden;
@@ -144,6 +177,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
+            min-height: 300px;
         }
 
         video#webcam, img#screenshot-preview {
@@ -151,6 +185,24 @@
             width: 100%;
             height: auto;
             object-fit: fill;
+        }
+
+        /* Video Controls Overlay für Sequenz-Analyse */
+        .video-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 12px;
+            background: rgba(0,0,0,0.4);
+            padding: 10px;
+            border-radius: 10px;
+            flex-wrap: wrap;
+        }
+
+        .video-controls input[type="range"] {
+            flex: 1;
+            accent-color: var(--accent);
+            cursor: pointer;
         }
 
         .status-panel {
@@ -232,22 +284,22 @@
         .throw-row { display: flex; justify-content: space-between; padding: 8px 4px; border-bottom: 1px solid var(--glass-border); font-weight: 600; }
         .throw-row small { color: var(--text-gray); font-weight: 500; }
         #throw-total { font-family: 'Rajdhani', sans-serif; font-size: 1.6rem; color: var(--accent); }
-        /* Handy-Kamera */
-        .phone-status { display:flex; align-items:center; gap:10px; margin-bottom:12px; font-weight:600; }
-        .phone-request { background:rgba(241,196,15,.12); border:1px solid rgba(241,196,15,.45); border-radius:14px; padding:14px; margin-bottom:12px; }
-        .pair-grid { display:flex; gap:18px; flex-wrap:wrap; align-items:center; margin-bottom:12px; }
-        .qr-box { background:#fff; padding:10px; border-radius:12px; min-width:60px; min-height:60px; }
-        .qr-box:empty { display:none; }
-        .pair-info { flex:1; min-width:220px; }
-        .pair-label { color:var(--text-gray); font-size:.8rem; margin:6px 0; }
-        .pair-code { font-family:'Rajdhani',sans-serif; font-size:2.6rem; font-weight:700; letter-spacing:.12em; color:var(--accent); }
-        .pair-link { color:#6db7ff; font-size:.8rem; word-break:break-all; }
-        .phone-select { background:rgba(255,255,255,.07); color:#fff; border:1px solid var(--glass-border); border-radius:10px; padding:10px 12px; font-size:.9rem; }
-        .phone-select option { color:#000; }
-        .btn-action.on { background:rgba(241,196,15,.25); border-color:rgba(241,196,15,.7); }
-        .zoom-row { display:flex; align-items:center; gap:12px; margin:12px 0 4px; color:var(--text-gray); font-size:.85rem; }
-        .zoom-row input { flex:1; accent-color: var(--accent); }
-        .phone-info { color:var(--text-gray); font-size:.82rem; line-height:1.6; margin-top:10px; }
+        /* Symbole + Erkennungsanzeige */
+        .ico { width:1.1em; height:1.1em; vertical-align:-0.2em; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; margin-right:.4em; }
+        .ico.fill { fill:currentColor; stroke:none; }
+        .turn-hud { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-top:12px; padding:10px 14px; border-radius:14px; background:rgba(255,255,255,.05); border:1px solid var(--glass-border); font-weight:600; }
+        .pips { display:inline-flex; gap:7px; }
+        .dart-pip { width:14px; height:14px; border-radius:50%; border:2px solid rgba(255,255,255,.35); display:inline-block; }
+        .dart-pip.on { background:#ff2d2d; border-color:#fff; }
+        .mark-opts { display:flex; gap:18px; flex-wrap:wrap; margin-top:10px; color:var(--text-gray); font-size:.85rem; }
+        .mark-opts label { display:flex; align-items:center; gap:6px; cursor:pointer; }
+        .level-row { margin-top:14px; padding:12px 14px; border-radius:14px; background:rgba(255,255,255,.04); border:1px solid var(--glass-border); }
+        .level-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; font-weight:600; }
+        .level-row input[type=range] { width:100%; accent-color: var(--accent); }
+        .level-scale { display:flex; justify-content:space-between; color:var(--text-gray); font-size:.75rem; }
+        .level-hint { color:var(--text-gray); font-size:.82rem; margin-top:6px; }
+        [hidden] { display:none !important; }
+        .throw-sep { padding:6px 4px; color:var(--accent); font-weight:700; font-size:.85rem; border-bottom:1px dashed var(--glass-border); }
     </style>
 </head>
 <body>
@@ -261,70 +313,42 @@
                 <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
             </button>
         </div>
-        <p>BOARD-SETUP & VISION</p>
-        <h1>KALIBRIERUNG & HANDY-KAMERA</h1>
+        <p>BOARD-SETUP & VIDEO-ANALYSE</p>
+        <h1>PEER-TO-PEER HANDY KAMERA</h1>
     </header>
 
     <div class="content-container">
-        <div class="hub-card" id="phone-card">
-            <h3>📱 Handy-Kamera über WLAN</h3>
-            <div class="phone-status"><div class="status-indicator" id="phone-dot"></div><span id="phone-status">Initialisiere …</span></div>
-
-            <div class="phone-request" id="phone-request" hidden>
-                <b id="phone-req-name">Handy</b> möchte seine Kamera an dieses Tablet senden.
-                <div class="btn-group" style="margin-top:10px;">
-                    <button class="btn-action" id="phone-accept" style="background:rgba(0,255,136,.2);border-color:rgba(0,255,136,.6);">Annehmen</button>
-                    <button class="btn-action btn-danger" id="phone-reject">Ablehnen</button>
-                </div>
-            </div>
-
-            <div id="phone-pair" hidden>
-                <div class="pair-grid">
-                    <div class="qr-box" id="phone-qr"></div>
-                    <div class="pair-info">
-                        <div class="pair-label">Am Handy <b>stream.html</b> öffnen und diesen Code eingeben:</div>
-                        <div class="pair-code" id="phone-code">––– –––</div>
-                        <div class="pair-label">oder QR-Code scannen / Link öffnen:</div>
-                        <a class="pair-link" id="phone-link" href="#" target="_blank" rel="noopener"></a>
-                    </div>
-                </div>
-            </div>
-
-            <div id="phone-ctrl" hidden>
-                <div class="btn-group">
-                    <button class="btn-action" id="pc-torch">🔦 Licht</button>
-                    <button class="btn-action" id="pc-switch">🔄 Kamera wechseln</button>
-                    <button class="btn-action" id="pc-lock">🔒 Fokus/Belichtung fixieren</button>
-                    <select class="phone-select" id="pc-res" title="Auflösung der Handy-Kamera">
-                        <option value="1280x720">1280×720</option>
-                        <option value="1920x1080" selected>1920×1080 (empfohlen)</option>
-                        <option value="3840x2160">3840×2160 (4K)</option>
-                    </select>
-                </div>
-                <div class="zoom-row" id="pc-zoom-row" hidden><span>Zoom</span><input type="range" id="pc-zoom" min="1" max="1" step="0.1" value="1"><span id="pc-zoom-val">1.0×</span></div>
-                <div class="phone-info" id="phone-info"></div>
-            </div>
-
-            <div class="btn-group" style="margin-top:14px;">
-                <button class="btn-action" id="phone-new">Neuer Code</button>
-                <button class="btn-action btn-danger" id="phone-disc">Handy trennen</button>
-                <button class="btn-action" id="phone-src">Tablet-Kamera nutzen</button>
-            </div>
-            <p class="info-box" id="phone-tip">
-                Handy fest aufstellen (Stativ/Halterung, am Ladekabel) und <b>stream.html</b> darauf öffnen. Danach bleibt es unberührt: kalibrieren und werfen machst du hier am Tablet. Bricht das WLAN kurz ab, verbindet sich das Handy von selbst neu und die gespeicherte Kalibrierung gilt weiter.
-            </p>
-        </div>
-
         <div class="hub-card">
+            <!-- Kopplungs-Code & QR-Code Banner -->
+            <div class="stream-code-box">
+                <div>
+                    <div style="font-size:0.8rem; color:var(--text-gray);">KOPPLUNGS-CODE FÜR DAS HANDY:</div>
+                    <div class="stream-code-val" id="pairing-code">------</div>
+                    <div style="font-size:0.75rem; color:var(--text-gray); margin-top:4px;">QR-Code enthält nur die 6 Zeichen</div>
+                </div>
+                <div id="qrcode"></div>
+                <button class="btn-action" id="btn-new-code"><svg class="ico" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>Neuer Code</button>
+            </div>
+
             <h3>
                 <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
-                Perspektiven-Ausrichtung & Raster
+                Perspektiven-Ausrichtung & Stream / Video
             </h3>
 
-            <!-- Kamera & Canvas Viewport -->
+            <!-- Kamera & Video Viewport -->
             <div class="camera-wrapper">
-                <video id="webcam" autoplay playsinline></video>
-                <input type="file" id="screenshot-input" accept="image/*" style="display: none;">
+                <video id="webcam" autoplay playsinline muted></video>
+                <input type="file" id="video-upload-input" accept="video/*" style="display: none;">
+                <input type="file" id="image-upload-input" accept="image/*" style="display: none;">
+            </div>
+
+            <!-- Video Player Controls für Sequenzen -->
+            <div class="video-controls" id="video-controls-bar" style="display: none;">
+                <button class="btn-action" id="vid-play-btn"><svg class="ico" viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>Pause</button>
+                <input type="range" id="vid-seek" value="0" min="0" max="100" step="0.1">
+                <span id="vid-time" style="font-size: 0.85rem; font-variant-numeric: tabular-nums;">0:00 / 0:00</span>
+                <!-- Screenshot-Button einzeln hinzugefügt -->
+                <button class="btn-action" id="vid-screenshot-btn" style="background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.3);"><svg class="ico" viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Frame speichern</button>
             </div>
 
             <!-- Interaktives Status-Panel -->
@@ -336,15 +360,31 @@
                 <div class="btn-group">
                     <button class="btn-action" id="btn-ref">Darts gezogen</button>
                     <button class="btn-action" id="btn-grid">Raster</button>
-                    <button class="btn-action" id="btn-auto" style="background: rgba(0,255,136,0.15); border-color: rgba(0,255,136,0.4);">🤖 Auto-Erkennung</button>
+                    <button class="btn-action" id="btn-auto" style="background: rgba(0,255,136,0.15); border-color: rgba(0,255,136,0.4);"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>Auto-Erkennung</button>
                     <button class="btn-action" id="btn-manual">15-Punkte Kalibrierung</button>
-                    <button class="btn-action" id="btn-upload" style="background: rgba(0,150,255,0.2); border-color: rgba(0,150,255,0.4);">📸 Screenshot testen</button>
+                    <button class="btn-action" id="btn-upload-vid" style="background: rgba(0,150,255,0.2); border-color: rgba(0,150,255,0.4);"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4"/></svg>Video analysieren</button>
+                    <button class="btn-action" id="btn-upload-img" style="background: rgba(255,170,0,0.15); border-color: rgba(255,170,0,0.45);"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.8"/><path d="M21 16l-5-5-8 8"/></svg>Screenshot laden</button>
+                    <button class="btn-action" id="btn-live" hidden><svg class="ico" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>Zurück zur Live-Ansicht</button>
                     <button class="btn-action btn-danger" id="btn-reset">Neu Kalibrieren</button>
                 </div>
             </div>
 
+
+            <div class="turn-hud"><span class="pips" id="turn-pips"></span><span id="turn-text">Bereit – Darts werfen</span></div>
+            <div class="mark-opts">
+                <label><input type="checkbox" id="mk-tip"> Dartspitze (roter Punkt)</label>
+                <label><input type="checkbox" id="mk-flight"> Flight markieren</label>
+                <label><input type="checkbox" id="mk-label"> Beschriftung</label>
+            </div>
+            <div class="level-row">
+                <div class="level-head"><span><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>Auto-Genauigkeit</span><b id="auto-level-name">Standard</b></div>
+                <input type="range" id="auto-level" min="1" max="5" step="1" value="3">
+                <div class="level-scale"><span>Minimal</span><span>Maximal</span></div>
+                <div class="level-hint" id="auto-level-hint"></div>
+            </div>
+
             <p class="info-box">
-                Setze nacheinander <b>1 Punkt im Bullseye</b>, <b>10 Punkte auf der äußeren Doppelring-Kante</b> und <b>4 Punkte auf der äußeren Triple-Ring-Kante</b> (blau). Oder drücke <b>Auto-Erkennung</b> (Kamera oder Screenshot): das Ergebnis erscheint vorbelegt und lässt sich vor dem Übernehmen verschieben. Das Raster wird danach als gelbe Linien eingeblendet.
+                Empfange das Live-Bild via P2P vom Handy, lade einen Screenshot oder ein Aufnahme-Video hoch, stoppe es an der Stelle, an der die Darts stecken, und kalibriere/analysiere sie präzise.
             </p>
         </div>
 
@@ -356,178 +396,8 @@
     </div>
 
     <!-- SCRIPT CONTAINER -->
-    <script type="module">
-/* Handy-Kamera-Empfänger: Signalisierung über Firestore, Video + Daten direkt im WLAN.
-   Wird als Promise bereitgestellt, damit die Seite auch ohne firebase_config.js / https weiterläuft. */
-/* ===== Handy-Kamera → Tablet: WebRTC-Verbindung (Signalisierung über Firestore, Daten + Video direkt im WLAN) =====
- * Ablauf: Tablet zeigt einen 6-stelligen Code. Das Handy (Sender) schreibt sein Angebot (offer) nach signaling/phone-<code>,
- * das Tablet (Empfänger) antwortet (answer). ICE-Kandidaten laufen über dasselbe Dokument. Danach fließen Video und der
- * Datenkanal „dartly“ direkt zwischen den Geräten. Jede Sitzung hat eine sid, damit veraltete Antworten/Kandidaten ignoriert werden. */
-const RTC_CONFIG = {
-  iceServers: [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
-    { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
-  ],
-};
-const sigId = code => 'phone-' + String(code).replace(/\D/g, '');
-const newSid = () => Math.random().toString(36).slice(2, 10);
-const plainDesc = d => ({ type: d.type, sdp: d.sdp });
-const plainCand = c => (c && typeof c.toJSON === 'function' ? c.toJSON() : c);
-
-class Emitter {
-  constructor() { this.l = {}; }
-  on(e, f) { (this.l[e] ||= []).push(f); return this; }
-  emit(e, d) { (this.l[e] || []).forEach(f => { try { f(d); } catch (err) { console.error(err); } }); }
-}
-
-/** Sammelt ICE-Kandidaten und schreibt sie gebündelt – erst nach release() (damit das Angebot/Antwort-Schreiben nichts überschreibt) */
-class IceOutbox {
-  constructor(fs, getRef, field, getSid, delay = 250) { Object.assign(this, { fs, getRef, field, getSid, delay }); this.buf = []; this.timer = null; this.open = false; }
-  reset() { this.buf = []; clearTimeout(this.timer); this.timer = null; this.open = false; }
-  push(c) { this.buf.push(JSON.stringify({ sid: this.getSid(), c: plainCand(c) })); this._arm(false); }
-  release() { this.open = true; this._arm(true); }
-  _arm(now) {
-    if (!this.open || !this.buf.length) return;
-    if (this.timer && !now) return;
-    clearTimeout(this.timer);
-    this.timer = setTimeout(async () => {
-      const b = this.buf; this.buf = []; this.timer = null;
-      try { await this.fs.setDoc(this.getRef(), { [this.field]: this.fs.arrayUnion(...b) }, { merge: true }); }
-      catch (e) { console.warn('[Link] ICE senden fehlgeschlagen:', e.message); }
-    }, now ? 0 : this.delay);
-  }
-}
-
-/* ------------------------------------------------------------------ Empfänger (Tablet) */
-class StreamReceiver extends Emitter {
-  /** opts: { code, trusted:[deviceIds] } */
-  constructor(deps, opts) {
-    super(); this.d = deps; this.code = String(opts.code).replace(/\D/g, ''); this.trusted = new Set(opts.trusted || []);
-    this.pc = null; this.dc = null; this.sid = null; this.pending = null; this.chain = Promise.resolve(); this.lastDoc = null;
-    this.outbox = new IceOutbox(deps.fs, () => this.ref, 'hubIceCandidates', () => this.sid);
-  }
-
-  async start() {
-    this.ref = this.d.fs.doc(this.d.db, 'signaling', sigId(this.code));
-    await this.d.fs.setDoc(this.ref, { receiverAt: new Date().toISOString() }, { merge: true });
-    this.unsub = this.d.fs.onSnapshot(this.ref, snap => { const data = snap.data(); this.chain = this.chain.then(() => this._onDoc(data)).catch(e => this.emit('error', e)); }, e => this.emit('error', e));
-    this.emit('state', 'waiting');
-  }
-
-  stop() { clearInterval(this.pingTimer); if (this.unsub) this.unsub(); this._closePc(); this.emit('state', 'stopped'); }
-
-  _closePc() {
-    clearInterval(this.pingTimer); this.outbox.reset();
-    if (this.dc) { try { this.dc.close(); } catch (_) { /* egal */ } this.dc = null; }
-    if (this.pc) { const pc = this.pc; this.pc = null; pc.onconnectionstatechange = pc.onicecandidate = pc.ontrack = pc.ondatachannel = null; try { pc.close(); } catch (_) { /* egal */ } }
-  }
-
-  async _onDoc(d) {
-    if (!d) return;
-    this.lastDoc = d;
-    if (d.offer && d.sid && d.sid !== this.sid) {                   // neue Sitzung vom Handy
-      this.sid = d.sid; this._closePc();
-      const dev = d.device || {};
-      if (dev.id && this.trusted.has(dev.id)) await this._answer(d);
-      else { this.pending = dev; this.emit('state', 'request'); this.emit('request', { device: dev }); }
-    } else if (this.pc && d.sid === this.sid) await this._processIce(d);
-  }
-
-  accept() {
-    const dev = this.pending; if (!dev) return; this.pending = null;
-    if (dev.id) { this.trusted.add(dev.id); this.emit('trust', [...this.trusted]); }
-    this.chain = this.chain.then(() => (this.lastDoc && this.lastDoc.sid === this.sid ? this._answer(this.lastDoc) : null)).catch(e => this.emit('error', e));
-  }
-
-  async reject() {
-    if (!this.pending) return; this.pending = null;
-    await this.d.fs.setDoc(this.ref, { rejected: true, rejectedSid: this.sid }, { merge: true });
-    this.emit('state', 'waiting');
-  }
-
-  async _answer(d) {
-    this._closePc();
-    const pc = new this.d.RTCPeerConnection(RTC_CONFIG); this.pc = pc; this.seen = new Set(); this.rtt = null;
-    pc.ontrack = e => { const s = (e.streams && e.streams[0]) || (typeof MediaStream !== 'undefined' ? new MediaStream([e.track]) : null); if (s) this.emit('stream', s); };
-    pc.ondatachannel = e => this._setupDc(e.channel);
-    pc.onicecandidate = e => { if (e.candidate) this.outbox.push(e.candidate); };
-    pc.onconnectionstatechange = () => { if (pc !== this.pc) return; this.emit('state', pc.connectionState === 'connected' ? 'connected' : pc.connectionState); };
-    this.emit('state', 'connecting');
-    await pc.setRemoteDescription(JSON.parse(d.offer));
-    await this._processIce(d);
-    const ans = await pc.createAnswer(); await pc.setLocalDescription(ans);
-    if (pc !== this.pc) return;
-    await this.d.fs.setDoc(this.ref, { answer: JSON.stringify(plainDesc(pc.localDescription || ans)), answerSid: d.sid }, { merge: true });
-    this.outbox.release();
-  }
-
-  async _processIce(d) {
-    const pc = this.pc; if (!pc || !pc.remoteDescription) return;
-    for (const s of d.cameraIceCandidates || []) {
-      if (this.seen.has(s)) continue; this.seen.add(s);
-      let o; try { o = JSON.parse(s); } catch (_) { continue; }
-      if (o.sid !== this.sid) continue;
-      try { await pc.addIceCandidate(o.c); } catch (_) { /* egal */ }
-    }
-  }
-
-  _setupDc(dc) {
-    this.dc = dc;
-    dc.onopen = () => { this.emit('open'); clearInterval(this.pingTimer); this.pingTimer = setInterval(() => this.send({ t: 'ping', ts: Date.now() }), 2000); };
-    dc.onclose = () => { clearInterval(this.pingTimer); this.emit('dc-close'); };
-    dc.onmessage = e => {
-      let m; try { m = JSON.parse(e.data); } catch (_) { return; }
-      if (m.t === 'pong') { this.rtt = Date.now() - m.ts; this.emit('rtt', this.rtt); }
-      this.emit('msg', m);
-    };
-  }
-
-  send(obj) { if (this.dc && this.dc.readyState === 'open') { this.dc.send(JSON.stringify(obj)); return true; } return false; }
-  cmd(name, args = {}) { return this.send({ t: 'cmd', cmd: name, ...args }); }
-
-  /** Verbindungs-Kennzahlen: Auflösung, fps, Bitrate, Weg (LAN direkt / Internet / Relay) */
-  async stats() {
-    if (!this.pc || !this.pc.getStats) return null;
-    const rep = await this.pc.getStats(); let inb = null, pair = null;
-    rep.forEach(r => { if (r.type === 'inbound-rtp' && (r.kind === 'video' || r.mediaType === 'video')) inb = r; if (r.type === 'candidate-pair' && (r.selected || (r.nominated && r.state === 'succeeded'))) pair = pair || r; });
-    let path = null;
-    if (pair) {
-      const l = rep.get(pair.localCandidateId), r = rep.get(pair.remoteCandidateId), lt = l && l.candidateType, rt = r && r.candidateType;
-      path = (lt === 'relay' || rt === 'relay') ? 'Relay (über Server)' : (lt === 'host' && (rt === 'host' || rt === 'prflx')) ? 'WLAN direkt' : 'P2P (Internet-Adresse)';
-    }
-    const now = Date.now(), out = { w: inb && inb.frameWidth, h: inb && inb.frameHeight, fps: inb && inb.framesPerSecond, path, rtt: this.rtt, kbps: null };
-    if (inb && this._lastBytes != null) out.kbps = Math.round(((inb.bytesReceived - this._lastBytes) * 8) / Math.max(1, now - this._lastAt));
-    if (inb) { this._lastBytes = inb.bytesReceived; this._lastAt = now; }
-    return out;
-  }
-}
-const PAIR_KEY = 'dartly_phone_code', TRUST_KEY = 'dartly_phone_trusted';
-window.DartlyPhoneReady = (async () => {
-  const { db } = await import('./firebase_config.js');
-  const m = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
-  const deps = { db, fs: { doc: m.doc, setDoc: m.setDoc, onSnapshot: m.onSnapshot, arrayUnion: m.arrayUnion }, RTCPeerConnection: window.RTCPeerConnection };
-  const read = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; } catch (_) { return d; } };
-  return {
-    code(renew = false) {
-      let c = localStorage.getItem(PAIR_KEY);
-      if (renew || !/^\d{6}$/.test(c || '')) { c = String(Math.floor(100000 + Math.random() * 900000)); localStorage.setItem(PAIR_KEY, c); }
-      return c;
-    },
-    createReceiver(code) {
-      const r = new StreamReceiver(deps, { code, trusted: read(TRUST_KEY, []) });
-      r.on('trust', list => localStorage.setItem(TRUST_KEY, JSON.stringify(list)));
-      return r;
-    },
-    async dropCode(code) { try { await m.deleteDoc(m.doc(db, 'signaling', sigId(code))); } catch (_) { /* egal */ } },
-  };
-})();
-window.DartlyPhoneReady.catch(e => console.warn('[Handy] Modul nicht verfügbar:', e.message));
-    </script>
-
     <script>
-/* Debug-Konsole: fängt console.* und Fehler ab, auch am Handy sichtbar (Button „Konsole“ unten links) */
+/* Debug-Konsole */
 (function () {
   const buf = []; let body = null, badge = null, errs = 0, stat = null;
   const fmt = a => a.map(x => typeof x === 'string' ? x : (x instanceof Error ? (x.stack || x.message) : (() => { try { return JSON.stringify(x); } catch (_) { return String(x); } })())).join(' ').slice(0, 800);
@@ -547,35 +417,31 @@ window.DartlyPhoneReady.catch(e => console.warn('[Handy] Modul nicht verfügbar:
   document.addEventListener('DOMContentLoaded', () => {
     const btn = document.createElement('button');
     btn.style.cssText = 'position:fixed;left:12px;bottom:12px;z-index:99998;background:#1b2030;color:#fff;border:1px solid #3a4260;border-radius:10px;padding:8px 12px;font:600 13px system-ui;cursor:pointer';
-    btn.innerHTML = '🐞 Konsole <span style="background:#ff4757;border-radius:8px;padding:0 6px;margin-left:4px" hidden></span>'; badge = btn.lastChild;
+    btn.innerHTML = '<svg class="ico" viewBox="0 0 24 24"><path d="M9 9h6a3 3 0 0 1 3 3v3a6 6 0 0 1-12 0v-3a3 3 0 0 1 3-3z"/><path d="M9 6a3 3 0 0 1 6 0M3 12h3M18 12h3M4 19l3-2M20 19l-3-2M4 6l3 2M20 6l-3 2"/></svg>Konsole <span style="background:#ff4757;border-radius:8px;padding:0 6px;margin-left:4px" hidden></span>'; badge = btn.lastChild;
     const panel = document.createElement('div');
     panel.style.cssText = 'position:fixed;left:0;right:0;bottom:0;height:42vh;z-index:99997;background:#07090f;color:#cfd6e6;font:11px/1.35 ui-monospace,Menlo,monospace;display:none;flex-direction:column;border-top:2px solid #3a4260';
     const bar = document.createElement('div'); bar.style.cssText = 'display:flex;gap:8px;align-items:center;padding:6px 8px;background:#11151f';
     stat = document.createElement('span'); stat.style.cssText = 'flex:1;opacity:.7'; stat.textContent = 'Konsole';
-    const mk = (t, f) => { const b = document.createElement('button'); b.textContent = t; b.style.cssText = 'background:#2d3550;color:#fff;border:0;border-radius:6px;padding:5px 10px;font:600 12px system-ui'; b.onclick = f; return b; };
-    bar.append(stat, mk('Kopieren', () => navigator.clipboard && navigator.clipboard.writeText(buf.map(l => l.t + ' [' + l.level + '] ' + l.text).join('\n'))), mk('Leeren', () => { buf.length = 0; body.innerHTML = ''; errs = 0; badge.hidden = true; }), mk('✕', () => { panel.style.display = 'none'; }));
-    body = document.createElement('div'); body.style.cssText = 'flex:1;overflow:auto;padding:6px 8px';
+    const mk = (t, f) => { const b = document.createElement('button'); b.innerHTML = t; b.style.cssText = 'background:#2d3550;color:#fff;border:0;border-radius:6px;padding:5px 10px;font:600 12px system-ui'; b.onclick = f; return b; };
+    bar.append(stat, mk('Kopieren', () => navigator.clipboard && navigator.clipboard.writeText(buf.map(l => l.t + ' [' + l.level + '] ' + l.text).join('\n'))), mk('Leeren', () => { buf.length = 0; body.innerHTML = ''; errs = 0; badge.hidden = true; }), mk('<svg class="ico" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>', () => { panel.style.display = 'none'; }));
     panel.append(bar, body); document.body.append(btn, panel);
     buf.forEach(row);
     btn.onclick = () => { panel.style.display = panel.style.display === 'none' ? 'flex' : 'none'; errs = 0; badge.hidden = true; body.scrollTop = body.scrollHeight; };
   });
   window.dartConsole = { add, setStats: t => { if (stat) stat.textContent = t; } };
-  console.log('[Konsole] bereit');
 })();
 </script>
 <script>
-/* OpenCV.js sofort im Hintergrund laden (Browser-Cache), damit „Auto-Erkennung“ ohne Wartezeit startet */
+/* OpenCV.js Cache */
 (function preloadOpenCVDirect() {
   const url = 'https://docs.opencv.org/4.x/opencv.js';
-  console.log('📥 Starte direktes Caching von OpenCV.js …');
-  if (document.querySelector('script[data-opencv]') || document.querySelector(`script[src="${url}"]`)) { console.log('ℹ️ OpenCV.js-Skript-Tag ist bereits vorhanden.'); return; }
+  if (document.querySelector('script[data-opencv]') || document.querySelector(`script[src="${url}"]`)) return;
   const script = document.createElement('script');
   script.src = url; script.async = true; script.dataset.opencv = '1';
-  script.onload = () => console.log('✅ OpenCV.js geladen und im Browser-Cache gespeichert (wird noch initialisiert).');
-  script.onerror = () => { window.__cvScriptFailed = true; console.warn('⚠️ Konnte OpenCV.js nicht laden. Bitte Internetverbindung prüfen (Auto-Erkennung wird beim Klick erneut versuchen).'); };
   document.head.appendChild(script);
 })();
 </script>
+
 <script>
 const LS_KEY = 'dartly_camera_homography_11pt';
 const BOARD = { size: 200, cx: 100, cy: 100, rOuter: 91 };
@@ -598,12 +464,13 @@ const DEFAULTS = {
   motion: {
     width: 160,
     fps: 15,
-    pixelThreshold: 28,
+    pixelThreshold: 18,
     startRatio: 0.004,
+    refRatio: 0.0012,            // Änderung gegenüber der Referenz, ab der geprüft wird (kleine, ruhig einschlagende Darts)
     stillRatio: 0.0015,
     stillFrames: 6,
     maxChangeRatio: 0.12,
-    minBlobPixels: 6,
+    minBlobPixels: 3,
     roiRadius: 125,
     maxScoreRadius: 115,
   },
@@ -615,7 +482,10 @@ const DEFAULTS = {
     iou: 0.5,
     heuristic: 'towardBoardCenter',
   },
-  targetMm: 0.2,                 // Zielgenauigkeit der Kalibrierung (Anzeige)
+  targetMm: 0.2,
+  autoLevel: 3,                  // Auto-Kalibrierung: 1 (minimal) … 5 (maximal)
+  turn: { darts: 3, emptyRatio: 0.004 },   // Darts je Aufnahme; darunter gilt das Board als leer (Darts gezogen)
+  marks: { tip: true, flight: true, label: true },   // Markierungen: Spitze (roter Punkt), Flight (blauer Ring), Beschriftung
   feedbackMs: 3000,
   onHit: null,
 };
@@ -646,7 +516,6 @@ const CALIB_TARGETS = ANCHOR_DEFINITIONS.map(w => {
 });
 
 class Homography {
-  /** Hartley-Normalisierung: Schwerpunkt -> 0, mittlerer Abstand -> sqrt(2). Macht die DLT numerisch stabil. */
   static normalize(pts) {
     const n = pts.length;
     const cx = pts.reduce((s, p) => s + p.x, 0) / n, cy = pts.reduce((s, p) => s + p.y, 0) / n;
@@ -659,7 +528,6 @@ class Homography {
     return A.map((_, i) => [0, 1, 2].map(j => A[i][0] * B[0][j] + A[i][1] * B[1][j] + A[i][2] * B[2][j]));
   }
 
-  /** Eigenwerte/-vektoren einer symmetrischen Matrix (zyklisches Jacobi-Verfahren). Eigenvektoren = Spalten von V. */
   static jacobiEigen(S) {
     const n = S.length, A = S.map(r => r.slice());
     const V = Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => (i === j ? 1 : 0)));
@@ -682,7 +550,6 @@ class Homography {
     return { values: A.map((r, i) => r[i]), V };
   }
 
-  /** Homographie src(Kamera) -> dst(Board) aus n >= 4 Punkten, Least Squares (kleinster Eigenvektor von AᵀA). */
   static solveLeastSquares(src, dst) {
     const n = src.length;
     if (n < 4 || dst.length < n) return null;
@@ -706,22 +573,15 @@ class Homography {
     return out.every(r => r.every(Number.isFinite)) ? out : null;
   }
 
-  /** Lösung für eine Punktteilmenge + Fehler (in Board-px) – null, wenn unbrauchbar */
   static evaluate(src, dst, idx) {
     const H = Homography.solveLeastSquares(idx.map(i => src[i]), idx.map(i => dst[i]));
     if (!H || !Homography.invert(H)) return null;
-    // alle Punkte müssen vor der Kamera liegen (Nenner gleiches Vorzeichen)
     const ws = idx.map(i => H[2][0] * src[i].x + H[2][1] * src[i].y + H[2][2]);
     if (!(ws.every(w => w > 0) || ws.every(w => w < 0))) return null;
     const errs = idx.map(i => { const q = Homography.apply(H, src[i].x, src[i].y); return Math.hypot(q.x - dst[i].x, q.y - dst[i].y); });
     return { H, rms: Math.sqrt(errs.reduce((s, e) => s + e * e, 0) / errs.length) };
   }
 
-  /**
-   * Robuster Fit: alle Punkte per Least Squares; liegt der RMS-Fehler über maxRms, wird ein klarer Ausreißer
-   * (Fehlklick) iterativ ausgeschlossen (max. maxDrop Punkte, mindestens minPts bleiben).
-   * Ergebnis: { H, rms, used, dropped, errors[], worst } oder null.
-   */
   static fit(src, dst, { maxRms = 3, minPts = 7, maxDrop = 3 } = {}) {
     const n = Math.min(src.length, dst.length);
     let used = [...Array(n).keys()], dropped = [];
@@ -732,7 +592,7 @@ class Homography {
         const sub = used.filter(i => i !== u), s = Homography.evaluate(src, dst, sub);
         if (s && (!best || s.rms < best.s.rms)) best = { u, s };
       }
-      if (!best || best.s.rms > sol.rms * 0.7) break;           // kein klarer Ausreißer
+      if (!best || best.s.rms > sol.rms * 0.7) break;
       dropped.push(best.u); used = used.filter(i => i !== best.u); sol = best.s;
     }
     if (!sol) return null;
@@ -764,23 +624,6 @@ class Homography {
   }
 }
 
-/* ============================== Phase 1c: Automatische Board-Erkennung (nur auf Knopfdruck) ==============================
- * Funktioniert für Live-Kamera und Screenshots. Ablauf:
- *  1. kleines Arbeitsbild (400 px, bei Misserfolg 560/720) -> Canny-Kanten -> Ellipsen-Kandidaten
- *  2. je Kandidat/Ring-Hypothese: Drehung + Sektor-Muster (20x Schwarz/Hell) + Ring-Leiter (Kanten bei 99/107/162/170 mm)
- *  3. Chamfer-Verfeinerung der 4 Ankerpunkte gegen die Kantenkarte (Ringe + Speichen)
- *  4. Prüfung: stimmt das Sektor-Muster im verfeinerten Raster? -> Konfidenz
- *  5. alle Ankerpunkte (Bull + Doppel + Triple) aus der Homographie vorhersagen -> Overlay zur Bestätigung
- */
-/* ============================== Phase 1c: Automatische Board-Erkennung (nur auf Knopfdruck) ==============================
- * Funktioniert für Live-Kamera und Screenshots. Ablauf:
- *  1. kleines Arbeitsbild (400 px, bei Misserfolg 560/720) -> Canny-Kanten -> Ellipsen-Kandidaten
- *  2. je Kandidat/Ring-Hypothese: Drehung + Sektor-Muster (20x Schwarz/Hell) + Ring-Leiter (Kanten bei 99/107/162/170 mm)
- *  3. Chamfer-Verfeinerung der 4 Ankerpunkte gegen die Kantenkarte (Ringe + Speichen)
- *  4. Prüfung: stimmt das Sektor-Muster im verfeinerten Raster? -> Konfidenz
- *  5. Subpixel-Verfeinerung (Gauss-Newton auf ~680 Kantenmesspunkten aller Ringe und Speichen)
- *  6. alle 15 Ankerpunkte aus der Homographie vorhersagen -> Overlay zur Bestätigung
- */
 const AUTO_WIRE4 = [9, 81, 189, 279];
 const AUTO_RINGS_MM = [99, 107, 162, 170, 225];
 const AUTO_LADDER_MM = [15.9, 99, 107, 162, 170];
@@ -810,6 +653,17 @@ function homog4(src, dst) {
   for (let i = 7; i >= 0; i--) { let s = M[i][8]; for (let k = i + 1; k < 8; k++) s -= M[i][k] * h[k]; h[i] = s / M[i][i]; }
   return [[h[0], h[1], h[2]], [h[3], h[4], h[5]], [h[6], h[7], 1]];
 }
+
+/** Auto-Genauigkeit: 1 = minimal/schnell … 5 = maximal. Steuert Arbeitsauflösung, Subpixel-Aufwand und wie streng das Ergebnis geprüft wird. */
+/** Auto-Genauigkeit: 1 = minimal/schnell … 5 = maximal. Steuert Arbeitsauflösung, Subpixel-Aufwand und wie streng das Ergebnis geprüft wird.
+ *  Toleranz: ab 30 % Muster-Treffer wird immer ein Vorschlag gezeigt (bei weniger als minFp als „unsicher“ markiert). */
+const AUTO_LEVELS = {
+  1: { name: 'Minimal',  widths: [400],           minFp: 0.4,  sub: null, cross: false },
+  2: { name: 'Niedrig',  widths: [400, 560],      minFp: 0.4,  sub: { maxW: 800,  iters: 3,  ring: 90 },  cross: true },
+  3: { name: 'Standard', widths: [400, 560, 720], minFp: 0.45, sub: { maxW: 1280, iters: 6,  ring: 120 }, cross: true },
+  4: { name: 'Hoch',     widths: [560, 720, 900], minFp: 0.6,  sub: { maxW: 1600, iters: 8,  ring: 150 }, cross: true },
+  5: { name: 'Maximal',  widths: [720, 900],      minFp: 0.8,  sub: { maxW: 2400, iters: 12, ring: 240 }, cross: true },
+};
 
 class AutoBoardDetector {
   /** Sektor-Muster auf einem skalierten Ellipsen-Ring: Drehung (±18°), Konsistenz, Kontrast */
@@ -912,7 +766,7 @@ class AutoBoardDetector {
       const A = [[ca * ca * e.a + sa * sa * e.b, ca * sa * (e.a - e.b)], [ca * sa * (e.a - e.b), sa * sa * e.a + ca * ca * e.b]];
       for (const R of AUTO_RINGS_MM) {
         const a170 = e.a * 170 / R;
-        if (!(a170 > 0.15 * minD && a170 < 0.75 * minD)) continue;
+        if (!(a170 > 0.1 * minD && a170 < 0.9 * minD)) continue;
         const pr = AutoBoardDetector.sectorPattern(sm, w, h, e.cx, e.cy, A, 134.5 / R);
         if (!pr) continue;
         const pat = pr.cons * Math.min(1, Math.max(0, pr.contrast) / 0.3);
@@ -922,7 +776,7 @@ class AutoBoardDetector {
     const key = x => x.pat * x.lad - 0.03 * Math.abs(Math.log(170 / x.R));
     hyps.sort((p, q) => key(q) - key(p));
     let best = null;
-    for (const hp of hyps.slice(0, 5)) {
+    for (const hp of hyps.slice(0, 8)) {
       const f = 170 / hp.R, P0 = [];
       for (const dg of AUTO_WIRE4) {
         const phi = (dg - 90 + hp.rho) * Math.PI / 180, c = Math.cos(phi), s = Math.sin(phi);
@@ -976,7 +830,7 @@ class AutoBoardDetector {
         const c = contours.get(i);
         try {
           const rr = cv.fitEllipse(c), a = rr.size.width / 2, b = rr.size.height / 2;
-          if (Math.min(a, b) > 0.12 * minD && Math.max(a, b) < 0.9 * minD && Math.min(a, b) / Math.max(a, b) > 0.5) {
+          if (Math.min(a, b) > 0.08 * minD && Math.max(a, b) < 1.0 * minD && Math.min(a, b) / Math.max(a, b) > 0.35) {
             const ang = rr.angle * Math.PI / 180, ca = Math.cos(ang), sa = Math.sin(ang), d = c.data32S, bins = new Array(36).fill(0);
             let err = 0;
             for (let k = 0; k < d.length; k += 2) {
@@ -986,7 +840,7 @@ class AutoBoardDetector {
               if (Math.abs(r - 1) < 0.06) bins[Math.floor(((Math.atan2(v, u) + Math.PI) / (2 * Math.PI)) * 36) % 36] = 1;
             }
             const fit = Math.max(0, 1 - (err / (d.length / 2)) / 0.06), score = fit * bins.reduce((x, y) => x + y, 0) / 36;
-            if (score > 0.2) cands.push({ cx: rr.center.x, cy: rr.center.y, a, b, ang, score });
+            if (score > 0.15) cands.push({ cx: rr.center.x, cy: rr.center.y, a, b, ang, score });
           }
         } finally { c.delete(); }
       }
@@ -998,21 +852,22 @@ class AutoBoardDetector {
   /* ---------- Subpixel-Verfeinerung: Gauss-Newton auf allen Ring- und Speichenkanten ---------- */
 
   /** Messpunkte auf dem Modell-Board: Ringe (99/107/162/170 mm) + Speichen, mit Board-Normalen */
-  static stations() {
-    if (AutoBoardDetector._st) return AutoBoardDetector._st;
+  static stations(ring = 120, spokes = [30, 45, 60, 75, 85, 115, 125, 135, 145, 152]) {
+    const key = ring + ':' + spokes.join(','); AutoBoardDetector._st = AutoBoardDetector._st || {};
+    if (AutoBoardDetector._st[key]) return AutoBoardDetector._st[key];
     const bx = [], by = [], nx = [], ny = [];
-    for (const rm of [99, 107, 162, 170]) for (let k = 0; k < 120; k++) {
-      const t = 2 * Math.PI * k / 120, r = rm * AUTO_K;
+    for (const rm of [99, 107, 162, 170]) for (let k = 0; k < ring; k++) {
+      const t = 2 * Math.PI * k / ring, r = rm * AUTO_K;
       bx.push(BOARD.cx + r * Math.cos(t)); by.push(BOARD.cy + r * Math.sin(t)); nx.push(Math.cos(t)); ny.push(Math.sin(t));
     }
     for (let k = 0; k < 20; k++) {
       const t = (9 + 18 * k - 90) * Math.PI / 180;
-      for (const rm of [30, 45, 60, 75, 85, 115, 125, 135, 145, 152]) {
+      for (const rm of spokes) {
         const r = rm * AUTO_K;
         bx.push(BOARD.cx + r * Math.cos(t)); by.push(BOARD.cy + r * Math.sin(t)); nx.push(-Math.sin(t)); ny.push(Math.cos(t));
       }
     }
-    return (AutoBoardDetector._st = { n: bx.length, bx, by, nx, ny });
+    return (AutoBoardDetector._st[key] = { n: bx.length, bx, by, nx, ny });
   }
 
   static project(P, X, Y) {
@@ -1033,24 +888,24 @@ class AutoBoardDetector {
   }
 
   /** Kantenlage (Maximum des Gradienten, Subpixel per Parabel) entlang der Modellnormalen; res = gemessen - Modell in Bild-px */
-  static measure(gray, gw, gh, P) {
-    const S = AutoBoardDetector.stations(), n = S.n;
+  static measure(gray, gw, gh, P, S, win = 3, step = 0.25) {
+    const n = S.n;
     const p = AutoBoardDetector.project(P, S.bx, S.by);
     const q = AutoBoardDetector.project(P, S.bx.map((v, i) => v + 0.5 * S.nx[i]), S.by.map((v, i) => v + 0.5 * S.ny[i]));
     if (!p || !q) return null;
     const res = new Float64Array(n).fill(NaN), nxi = new Float64Array(n), nyi = new Float64Array(n), sg = new Float64Array(n);
-    const M = 25, step = 0.25, prof = new Float64Array(M), d = new Float64Array(M);
+    const M = Math.round(2 * win / step) + 1, mg = Math.max(2, Math.round(0.5 / step)), prof = new Float64Array(M), d = new Float64Array(M);
     for (let i = 0; i < n; i++) {
       let dx = q.xs[i] - p.xs[i], dy = q.ys[i] - p.ys[i]; const L = Math.hypot(dx, dy);
       if (!(L > 1e-9)) continue;
       dx /= L; dy /= L; nxi[i] = dx; nyi[i] = dy;
-      for (let j = 0; j < M; j++) { const t = -3 + j * step; prof[j] = AutoBoardDetector.bilinear(gray, gw, gh, p.xs[i] + t * dx, p.ys[i] + t * dy); }
+      for (let j = 0; j < M; j++) { const t = -win + j * step; prof[j] = AutoBoardDetector.bilinear(gray, gw, gh, p.xs[i] + t * dx, p.ys[i] + t * dy); }
       d[0] = Math.abs(prof[1] - prof[0]) / step; d[M - 1] = Math.abs(prof[M - 1] - prof[M - 2]) / step;
       for (let j = 1; j < M - 1; j++) d[j] = Math.abs(prof[j + 1] - prof[j - 1]) / (2 * step);
       let jm = 0; for (let j = 1; j < M; j++) if (d[j] > d[jm]) jm = j;
-      if (jm <= 1 || jm >= M - 2 || d[jm] < 6) continue;
+      if (jm < mg || jm > M - 1 - mg || d[jm] < 6) continue;
       const a = d[jm - 1], b = d[jm], c = d[jm + 1], den = a - 2 * b + c;
-      res[i] = -3 + jm * step + (Math.abs(den) > 1e-9 ? 0.5 * (a - c) / den : 0) * step;
+      res[i] = -win + jm * step + (Math.abs(den) > 1e-9 ? 0.5 * (a - c) / den : 0) * step;
       sg[i] = Math.sign(prof[jm + 1] - prof[jm - 1]);        // Polarität der Kante (hell->dunkel / dunkel->hell)
     }
     return { p, nx: nxi, ny: nyi, res, sg };
@@ -1070,14 +925,17 @@ class AutoBoardDetector {
   }
 
   /** P0 = Bildpunkte der 4 Referenz-Drahtkreuzungen (8 Werte) im Koordinatensystem von gray; gray = leicht geglättetes Graubild */
-  static subpixel(gray, gw, gh, P0) {
-    const S = AutoBoardDetector.stations(), med = a => { const s = [...a].sort((x, y) => x - y), n = s.length; return n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2; };
+  static subpixel(gray, gw, gh, P0, opts = {}) {
+    const iters = opts.iters || 6, sc = Math.max(1, gw / 1280), win0 = opts.win || 3 * sc, step0 = opts.step || 0.25;
+    const S = AutoBoardDetector.stations(opts.ring || 120), med = a => { const s = [...a].sort((x, y) => x - y), n = s.length; return n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2; };
     let P = P0.slice(), rms = NaN, nOk = 0;
-    for (let it = 0; it < 6; it++) {
-      const m = AutoBoardDetector.measure(gray, gw, gh, P);
+    // Fangbereich: erst grob (doppeltes Fenster, doppelte Schrittweite), damit auch ungenaue Startwerte (bis ca. ±6 px) einrasten, dann fein
+    const phases = opts.coarse === false ? [{ win: win0, step: step0, n: iters }] : [{ win: win0 * 2, step: step0 * 2, n: Math.max(2, Math.round(iters / 3)) }, { win: win0, step: step0, n: iters }];
+    for (const ph of phases) for (let it = 0; it < ph.n; it++) {
+      const m = AutoBoardDetector.measure(gray, gw, gh, P, S, ph.win, ph.step);
       if (!m) break;
       const idx = []; for (let i = 0; i < S.n; i++) if (!Number.isNaN(m.res[i])) idx.push(i);
-      nOk = idx.length; if (nOk < 100) break;
+      nOk = idx.length; if (nOk < 60) break;
       const r = idx.map(i => m.res[i]), md = med(r), s = 1.4826 * med(r.map(v => Math.abs(v - md))) + 1e-3;
       rms = Math.sqrt(r.reduce((a, v) => a + v * v, 0) / r.length);
       const wt = r.map(v => (Math.abs(v) < 2 * s ? 1 : 2 * s / Math.abs(v)));
@@ -1087,8 +945,7 @@ class AutoBoardDetector {
         const pq = AutoBoardDetector.project(Q, S.bx, S.by); if (!pq) return null;
         for (let k = 0; k < idx.length; k++) { const i = idx[k]; J[k][j] = ((pq.xs[i] - m.p.xs[i]) * m.nx[i] + (pq.ys[i] - m.p.ys[i]) * m.ny[i]) / dlt; }
       }
-      // 9. Parameter: Polaritäts-Offset beta (Kanten-Lage hängt davon ab, auf welcher Seite des Drahts die dunkle Fläche liegt)
-      for (let k = 0; k < idx.length; k++) J[k][8] = m.sg[idx[k]];
+      for (let k = 0; k < idx.length; k++) J[k][8] = m.sg[idx[k]];            // Polaritäts-Offset
       const A = Array.from({ length: 9 }, () => new Array(9).fill(0)), b = new Array(9).fill(0);
       for (let k = 0; k < idx.length; k++) for (let a = 0; a < 9; a++) { b[a] += wt[k] * J[k][a] * r[k]; for (let c = 0; c < 9; c++) A[a][c] += wt[k] * J[k][a] * J[k][c]; }
       for (let a = 0; a < 9; a++) A[a][a] += 1e-3;
@@ -1099,11 +956,74 @@ class AutoBoardDetector {
     return { P, rms, n: nOk };
   }
 
-  /** Gauss-Glättung (sigma 1) */
-  static blur(src, w, h) {
-    const k = [0.0044, 0.054, 0.242, 0.399, 0.242, 0.054, 0.0044], tmp = new Float32Array(w * h), out = new Float32Array(w * h);
-    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { let s = 0; for (let t = -3; t <= 3; t++) s += k[t + 3] * src[y * w + Math.min(w - 1, Math.max(0, x + t))]; tmp[y * w + x] = s; }
-    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { let s = 0; for (let t = -3; t <= 3; t++) s += k[t + 3] * tmp[Math.min(h - 1, Math.max(0, y + t)) * w + x]; out[y * w + x] = s; }
+  /* ---------- Alle Drahtschnittpunkte (Speichen × Ringe) als Messpunkte – nur für die Auto-Kalibrierung ---------- */
+
+  /** Alle Kreuzungen im Board-System (Ringe 99/107/162/170 mm × 20 Speichen = 80 Punkte) */
+  static crossings() {
+    if (AutoBoardDetector._cr) return AutoBoardDetector._cr;
+    const out = [];
+    for (const rm of [99, 107, 162, 170]) for (let k = 0; k < 20; k++) { const t = (9 + 18 * k - 90) * Math.PI / 180, r = rm * AUTO_K; out.push({ bx: BOARD.cx + r * Math.cos(t), by: BOARD.cy + r * Math.sin(t), ring: rm, k }); }
+    return (AutoBoardDetector._cr = out);
+  }
+
+  /**
+   * Feine Lage einer Kreuzung aus den Kantenrichtungen im Fenster (Schnittpunkt aller Kantentangenten, Subpixel):
+   * minimiert Σ w·(n·(x−p))² mit n = Gradientenrichtung, w = |Gradient|². Rückgabe null, wenn nur eine Linie sichtbar ist.
+   */
+  static crossingAt(gray, gw, gh, px, py, rad) {
+    const x0 = Math.max(1, Math.floor(px - rad)), x1 = Math.min(gw - 2, Math.ceil(px + rad)), y0 = Math.max(1, Math.floor(py - rad)), y1 = Math.min(gh - 2, Math.ceil(py + rad));
+    let a = 0, b = 0, c = 0, rx = 0, ry = 0, ws = 0;
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+      const dx = x - px, dy = y - py, dd = dx * dx + dy * dy; if (dd > rad * rad) continue;
+      const gx = (gray[y * gw + x + 1] - gray[y * gw + x - 1]) / 2, gy = (gray[(y + 1) * gw + x] - gray[(y - 1) * gw + x]) / 2, m2 = gx * gx + gy * gy;
+      if (m2 < 1) continue;
+      const w = m2 * Math.exp(-dd / (rad * rad));                               // Fenstergewicht: Mitte zählt mehr
+      const nxx = gx * gx / m2, nxy = gx * gy / m2, nyy = gy * gy / m2;
+      a += w * nxx; b += w * nxy; c += w * nyy; rx += w * (nxx * x + nxy * y); ry += w * (nxy * x + nyy * y); ws += w;
+    }
+    if (ws <= 0) return null;
+    const det = a * c - b * b, tr = a + c;
+    if (det < 0.03 * tr * tr) return null;                      // nur eine Richtung (keine echte Kreuzung)
+    return { x: (c * rx - b * ry) / det, y: (a * ry - b * rx) / det, strength: det / (tr * tr) };
+  }
+
+  /** Alle Kreuzungen suchen und mit robustem Fit (Ausreißer werden verworfen) zu einer Homographie verdichten */
+  static fitCrossings(gray, gw, gh, Hb, opts = {}) {
+    const c0 = Homography.apply(Hb, BOARD.cx, BOARD.cy), c1 = Homography.apply(Hb, BOARD.cx + 10, BOARD.cy);
+    const pxPerMm = Math.hypot(c1.x - c0.x, c1.y - c0.y) / 10 * (BOARD.rOuter / 170);
+    const rad = Math.min(7, Math.max(3, 2.8 * pxPerMm)), maxShift = Math.max(2.5, 2.4 * pxPerMm);
+    const cr = AutoBoardDetector.crossings(), src = [], dst = [];
+    for (const c of cr) {
+      const p = Homography.apply(Hb, c.bx, c.by);
+      if (!(p.x > rad && p.y > rad && p.x < gw - rad && p.y < gh - rad)) continue;
+      const q = AutoBoardDetector.crossingAt(gray, gw, gh, p.x, p.y, rad);
+      if (!q || Math.hypot(q.x - p.x, q.y - p.y) > maxShift) continue;
+      src.push({ x: q.x, y: q.y }); dst.push({ x: c.bx, y: c.by });
+    }
+    if (src.length < 24) return null;
+    // robuster Fit: Least Squares, Ausreißer (> 2,5·MAD) streichen, wiederholen
+    let idx = src.map((_, i) => i), H = null;
+    for (let it = 0; it < 4; it++) {
+      H = Homography.solveLeastSquares(idx.map(i => src[i]), idx.map(i => dst[i])); if (!H) return null;
+      const e = src.map((p, i) => { const q = Homography.apply(H, p.x, p.y); return Math.hypot(q.x - dst[i].x, q.y - dst[i].y); });
+      const ev = idx.map(i => e[i]).sort((a, b) => a - b), med = ev[ev.length >> 1], mad = ev.map(v => Math.abs(v - med)).sort((a, b) => a - b)[ev.length >> 1] * 1.4826 + 0.02;
+      const keep = src.map((_, i) => i).filter(i => e[i] <= med + 2.5 * mad + 0.05);
+      if (keep.length === idx.length || keep.length < 24) { idx = keep.length < 24 ? idx : keep; break; }
+      idx = keep;
+    }
+    H = Homography.solveLeastSquares(idx.map(i => src[i]), idx.map(i => dst[i]));
+    const e = idx.map(i => { const q = Homography.apply(H, src[i].x, src[i].y); return Math.hypot(q.x - dst[i].x, q.y - dst[i].y); });
+    return { Hcb: H, n: idx.length, found: src.length, rms: Math.sqrt(e.reduce((s, v) => s + v * v, 0) / e.length) };   // Hcb: Kamera -> Board
+  }
+
+  /** Gauss-Glättung (sigma in Pixeln, separabel) */
+  static blur(src, w, h, sigma = 1) {
+    const r = Math.max(1, Math.ceil(3 * sigma)), k = new Float64Array(2 * r + 1); let sum = 0;
+    for (let i = -r; i <= r; i++) { k[i + r] = Math.exp(-(i * i) / (2 * sigma * sigma)); sum += k[i + r]; }
+    for (let i = 0; i < k.length; i++) k[i] /= sum;
+    const tmp = new Float32Array(w * h), out = new Float32Array(w * h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { let s = 0; for (let t = -r; t <= r; t++) s += k[t + r] * src[y * w + Math.min(w - 1, Math.max(0, x + t))]; tmp[y * w + x] = s; }
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { let s = 0; for (let t = -r; t <= r; t++) s += k[t + r] * tmp[Math.min(h - 1, Math.max(0, y + t)) * w + x]; out[y * w + x] = s; }
     return out;
   }
 
@@ -1112,42 +1032,60 @@ class AutoBoardDetector {
     const gw = Math.min(srcW, maxW), gh = Math.round(srcH * gw / srcW);
     const c = AutoBoardDetector.downscale(media, srcW, srcH, gw, gh), d = c.getContext('2d').getImageData(0, 0, gw, gh).data, g = new Float32Array(gw * gh);
     for (let i = 0; i < g.length; i++) g[i] = 0.299 * d[4 * i] + 0.587 * d[4 * i + 1] + 0.114 * d[4 * i + 2];
-    return { gray: AutoBoardDetector.blur(g, gw, gh), gw, gh };
+    return { gray: AutoBoardDetector.blur(g, gw, gh, Math.max(1, gw / 1280)), gw, gh };
   }
 
   /**
-   * Erkennung mit steigender Arbeitsbreite (400 -> 560 -> 720), bis das Sektor-Muster passt; danach Subpixel-Verfeinerung.
-   * Rückgabe: { points (alle Anker in Originalbild-Pixeln), fp, confidence, width, ms, refined, nStations, pxPerMm } oder null
+   * Erkennung (Stufe über cfg.autoLevel 1–5): Arbeitsbreiten durchprobieren, Sektor-Muster prüfen, Subpixel-Fit auf allen Ring-/Speichenkanten
+   * (Fangbereich ca. ±12 px), danach ALLE Drahtkreuzungen (80) per robustem Fit; beide Ergebnisse werden gemittelt.
+   * Rückgabe: { points (15 Anker in Originalpixeln), fp, confidence, width, ms, refined, crossings, pxPerMm, uncertain } oder null
    */
   static async detect(media, cfg, progress = () => {}) {
     const srcW = media.videoWidth || media.naturalWidth, srcH = media.videoHeight || media.naturalHeight;
     if (!srcW || !srcH) throw new Error('kein Bild vorhanden');
+    const level = AUTO_LEVELS[cfg.autoLevel] || AUTO_LEVELS[3], pause = () => new Promise(r => setTimeout(r, 0));
     progress('OpenCV wird geladen (einmalig) …');
     const { cv } = await loadOpenCV(cfg.opencvUrl);
     const t0 = performance.now(); let best = null;
-    for (const width of [400, 560, 720]) {
-      progress(`Suche Board (${width} px) …`);
-      await new Promise(r => setTimeout(r, 0));                // UI atmen lassen
+    for (const width of level.widths) {
+      progress(`Suche Board (${width} px) …`); await pause();
       const r = AutoBoardDetector.pass(cv, media, srcW, srcH, width);
       console.log(`[Auto] ${width}px: ` + (r ? `Muster ${(r.fp * 100).toFixed(0)} %, Leiter ${(r.lad * 100).toFixed(0)} %, Ring ${r.R} mm, Rotation ${r.rho.toFixed(1)}°` : 'nichts gefunden'));
       if (r && (!best || r.fp > best.fp)) best = r;
-      if (best && best.fp >= 0.8) break;
+      if (best && best.fp >= Math.max(0.8, level.minFp)) break;
     }
-    if (!best || best.fp < 0.5) return null;
-
-    progress('Verfeinere auf Subpixel …');
-    await new Promise(r => setTimeout(r, 0));
-    const { gray, gw, gh } = AutoBoardDetector.makeGray(media, srcW, srcH, 1600);
-    const P0 = AUTO_TARGETS4.flatMap(t => { const p = Homography.apply(best.Hbi, t.x, t.y); return [p.x * gw / best.w, p.y * gh / best.h]; });
-    const sp = AutoBoardDetector.subpixel(gray, gw, gh, P0);
-    let P = P0, refined = false;
-    if (sp && sp.n >= 150 && Math.max(...sp.P.map((v, i) => Math.abs(v - P0[i]))) < 0.015 * gw) { P = sp.P; refined = true; }
-    console.log(`[Auto] Subpixel: ` + (refined ? `${sp.n} Messpunkte, Kantenrest ${sp.rms.toFixed(2)} px, Verschiebung max ${Math.max(...sp.P.map((v, i) => Math.abs(v - P0[i]))).toFixed(2)} px` : 'verworfen (zu wenige/unplausible Kanten) – grobes Raster'));
-    const Hb = homog4(AUTO_TARGETS4, [0, 1, 2, 3].map(i => ({ x: P[2 * i], y: P[2 * i + 1] })));
-    const points = CALIB_TARGETS.map(t => { const p = Homography.apply(Hb, t.x, t.y); return { x: p.x * srcW / gw, y: p.y * srcH / gh }; });
+    if (!best || best.fp < 0.3) return null;
+    const uncertain = best.fp < level.minFp;
+    const toSrc = (H, gw, gh) => CALIB_TARGETS.map(t => { const p = Homography.apply(H, t.x, t.y); return { x: p.x * srcW / gw, y: p.y * srcH / gh }; });
+    let points = toSrc(best.Hbi, best.w, best.h), refined = false, crossings = 0;
+    if (level.sub) {
+      progress('Verfeinere auf Subpixel …'); await pause();
+      const { gray, gw, gh } = AutoBoardDetector.makeGray(media, srcW, srcH, level.sub.maxW);
+      const P0 = AUTO_TARGETS4.flatMap(t => { const p = Homography.apply(best.Hbi, t.x, t.y); return [p.x * gw / best.w, p.y * gh / best.h]; });
+      const sp = AutoBoardDetector.subpixel(gray, gw, gh, P0, level.sub);
+      const shift = sp ? Math.max(...sp.P.map((v, i) => Math.abs(v - P0[i]))) : Infinity;
+      console.log('[Auto] Subpixel: ' + (sp ? `${sp.n} Messpunkte, Kantenrest ${sp.rms.toFixed(2)} px, Verschiebung max ${shift.toFixed(1)} px` : 'fehlgeschlagen'));
+      if (sp && sp.n >= 100 && shift < 0.06 * gw) {
+        refined = true;
+        const Hb = homog4(AUTO_TARGETS4, [0, 1, 2, 3].map(i => ({ x: sp.P[2 * i], y: sp.P[2 * i + 1] })));
+        let ptsA = toSrc(Hb, gw, gh);
+        if (level.cross) {
+          progress('Prüfe alle Drahtkreuzungen …'); await pause();
+          const fc = AutoBoardDetector.fitCrossings(gray, gw, gh, Hb), Hb2 = fc && Homography.invert(fc.Hcb);
+          if (Hb2) {
+            const ptsB = toSrc(Hb2, gw, gh);
+            const pxmm0 = ptsA.slice(1, 11).reduce((s, p) => s + Math.hypot(p.x - ptsA[0].x, p.y - ptsA[0].y), 0) / 10 / 170;
+            const dev = ptsA.reduce((s, p, i) => s + Math.hypot(p.x - ptsB[i].x, p.y - ptsB[i].y), 0) / ptsA.length / pxmm0;
+            console.log(`[Auto] ${fc.n}/${fc.found} Drahtkreuzungen, Abweichung zum Kantenfit Ø ${dev.toFixed(2)} mm`);
+            if (dev < 1.5) { ptsA = ptsA.map((p, i) => ({ x: (p.x + ptsB[i].x) / 2, y: (p.y + ptsB[i].y) / 2 })); crossings = fc.n; }
+          }
+        }
+        points = ptsA;
+      }
+    }
     const pxPerMm = points.slice(1, 11).reduce((s, p) => s + Math.hypot(p.x - points[0].x, p.y - points[0].y), 0) / 10 / 170;
-    const confidence = 0.5 * best.fp + 0.5 * Math.min(1, best.lad / 0.8);
-    return { points, fp: best.fp, confidence, width: best.width, ms: Math.round(performance.now() - t0), refined, nStations: refined ? sp.n : 0, pxPerMm };
+    const confidence = Math.min(1, 0.5 * best.fp + 0.5 * Math.min(1, best.lad / 0.8));
+    return { points, fp: best.fp, confidence, width: best.width, ms: Math.round(performance.now() - t0), refined, crossings, pxPerMm, uncertain };
   }
 }
 
@@ -1180,6 +1118,7 @@ function loadOpenCV(url) {
   window.__cvReady = p; p.catch(() => { window.__cvReady = null; });
   return p;
 }
+
 
 class Scoring {
   static make(segment, multiplier, extra = {}) {
@@ -1238,6 +1177,22 @@ function injectCss() {
   document.head.appendChild(s);
 }
 
+const ICON = {
+  refresh: '<svg class="ico" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>',
+  pause: '<svg class="ico" viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>',
+  play: '<svg class="ico fill" viewBox="0 0 24 24"><path d="M7 4.5l12 7.5-12 7.5z"/></svg>',
+  camera: '<svg class="ico" viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>',
+  target: '<svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>',
+  film: '<svg class="ico" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4"/></svg>',
+  image: '<svg class="ico" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.8"/><path d="M21 16l-5-5-8 8"/></svg>',
+  bug: '<svg class="ico" viewBox="0 0 24 24"><path d="M9 9h6a3 3 0 0 1 3 3v3a6 6 0 0 1-12 0v-3a3 3 0 0 1 3-3z"/><path d="M9 6a3 3 0 0 1 6 0M3 12h3M18 12h3M4 19l3-2M20 19l-3-2M4 6l3 2M20 6l-3 2"/></svg>',
+  close: '<svg class="ico" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  check: '<svg class="ico" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7"/></svg>',
+  phone: '<svg class="ico" viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2.5"/><path d="M11 18.5h2"/></svg>',
+  scan: '<svg class="ico" viewBox="0 0 24 24"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/><path d="M4 12h16"/></svg>',
+  sun: '<svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M5 19l1.5-1.5M17.5 6.5L19 5"/></svg>',
+  moon: '<svg class="ico" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>'
+};
 const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
 
 function merge(a, b) {
@@ -1251,7 +1206,7 @@ function merge(a, b) {
 
 function drawBoardOverlay(ctx, Hinv, radii, color = 'rgba(255,220,0,.9)') {
   const P = (x, y) => Homography.apply(Hinv, x, y);
-  ctx.save(); ctx.strokeStyle = color; ctx.lineWidth = 2;
+  ctx.save(); ctx.strokeStyle = color; ctx.lineWidth = 1; // Dünner gezeichnet
   for (const r of Object.values(radii)) {
     ctx.beginPath();
     for (let i = 0; i <= 72; i++) {
@@ -1266,10 +1221,26 @@ function drawBoardOverlay(ctx, Hinv, radii, color = 'rgba(255,220,0,.9)') {
     const b = P(BOARD.cx + radii.doubleOuter * Math.cos(t), BOARD.cy + radii.doubleOuter * Math.sin(t));
     ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
   }
+
+  // Kleine dünne Zahlen hinzugefügt
+  ctx.font = '10px Inter, sans-serif';
+  ctx.fillStyle = color;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  
+  for (let k = 0; k < 20; k++) {
+    const sectorNum = SECTOR_ORDER[k];
+    const angleDeg = 18 * k; // 20 Sektoren á 18 Grad
+    const t = (angleDeg - 90) * Math.PI / 180;
+    // Position etwas außerhalb des Doppelrings (z.B. Radius 185 mm statt 170 mm)
+    const labelRadius = 185 * (BOARD.rOuter / BOARD_MM.doubleOuter);
+    const p = P(BOARD.cx + labelRadius * Math.cos(t), BOARD.cy + labelRadius * Math.sin(t));
+    ctx.fillText(sectorNum, p.x, p.y);
+  }
+
   ctx.restore();
 }
 
-/** Auflösung des Bildes auf dem Board in px pro mm (aus der Homographie Kamera -> Board) */
 function pxPerMmOf(H) {
   const Hi = Homography.invert(H); if (!Hi) return 0;
   const c = Homography.apply(Hi, BOARD.cx, BOARD.cy);
@@ -1302,12 +1273,11 @@ class ManualCalibrationOverlay {
         const r = cvs.getBoundingClientRect();
         return { x: (e.clientX - r.left) * cvs.width / r.width, y: (e.clientY - r.top) * cvs.height / r.height, k: cvs.width / r.width };
       };
-      // Lupe (4-fach) für präzises Setzen der Kreuze
       const showLoupe = p => {
         if (!p) { loupe.style.display = 'none'; return; }
         const span = 36 * Math.max(1, w / 1280);
         lctx.clearRect(0, 0, 144, 144);
-        try { lctx.drawImage(this.mediaSource, p.x - span / 2, p.y - span / 2, span, span, 0, 0, 144, 144); } catch (_) { /* Bild noch nicht bereit */ }
+        try { lctx.drawImage(this.mediaSource, p.x - span / 2, p.y - span / 2, span, span, 0, 0, 144, 144); } catch (_) {}
         lctx.lineWidth = 1.5;
         for (const [c, wd] of [['rgba(0,0,0,.8)', 3.5], ['#00ff88', 1.2]]) {
           lctx.strokeStyle = c; lctx.lineWidth = wd; lctx.beginPath();
@@ -1316,7 +1286,6 @@ class ManualCalibrationOverlay {
         }
         loupe.style.display = 'block';
       };
-      // Kreuz mit Lücke in der Mitte: die Drahtkreuzung bleibt sichtbar
       const drawCross = (p, color, s, bad) => {
         const arm = 15 * s, gap = 3.5 * s;
         for (const [c, wd] of [['rgba(0,0,0,.8)', (bad ? 5 : 4) * s], [color, (bad ? 2.4 : 1.6) * s]]) {
@@ -1325,7 +1294,6 @@ class ManualCalibrationOverlay {
           ctx.moveTo(p.x, p.y - arm); ctx.lineTo(p.x, p.y - gap); ctx.moveTo(p.x, p.y + gap); ctx.lineTo(p.x, p.y + arm); ctx.stroke();
         }
       };
-      // live = während des Ziehens: schneller Fit ohne Ausreißer-Suche (spart Rechenleistung)
       const redraw = (live = false) => {
         ctx.clearRect(0, 0, cvs.width, cvs.height);
         const n = this.pts.length, done = n === ANCHOR_COUNT;
@@ -1344,11 +1312,11 @@ class ManualCalibrationOverlay {
         });
         const good = done && fit && fit.rms <= 3, pre = this.note ? this.note + ' – ' : '';
         if (!done) msg.textContent = pre + (ANCHOR_DEFINITIONS[n] ? ANCHOR_DEFINITIONS[n].label : 'Klicke Ankerpunkte') + (fit ? `  (Zwischen-Fehler ${(fit.rms * 170 / 91).toFixed(2)} mm)` : '');
-        else if (!fit) msg.textContent = 'Punkte ergeben keine gültige Perspektive – bitte Reihenfolge/Positionen prüfen (Kreuze sind verschiebbar).';
-        else if (fit.rms > 3) msg.textContent = `Kreuz ${fit.worst + 1} weicht stark ab (${(fit.errors[fit.worst] * 170 / 91).toFixed(1)} mm) – bitte verschieben.`;
+        else if (!fit) msg.textContent = 'Punkte ergeben keine gültige Perspektive – bitte Positionen prüfen.';
+        else if (fit.rms > 3) msg.textContent = `Kreuz ${fit.worst + 1} weicht stark ab (${(fit.errors[fit.worst] * 170 / 91).toFixed(1)} mm).`;
         else {
           const mm = fit.rms * 170 / 91, res = pxPerMmOf(fit.H);
-          msg.textContent = pre + `${ANCHOR_COUNT} Kreuze, Fehler Ø ${mm.toFixed(2)} mm` + (mm <= (this.cfg.targetMm || 0.2) ? ' ✓' : '') + (res ? `, Auflösung ${res.toFixed(2)} px/mm` : '') + (fit.dropped.length ? `, Kreuz ${fit.dropped.map(i => i + 1).join(', ')} wird ignoriert` : '') + '. Raster prüfen, ggf. verschieben, dann „Übernehmen“.';
+          msg.textContent = pre + `${ANCHOR_COUNT} Kreuze, Fehler Ø ${mm.toFixed(2)} mm` + (res ? `, Auflösung ${res.toFixed(2)} px/mm` : '') + '. Drücke „Übernehmen“.';
         }
         bOk.disabled = !good;
       };
@@ -1386,6 +1354,18 @@ class MotionDetector {
     const d = this.ctx.getImageData(0, 0, w, h).data, g = new Uint8Array(w * h);
     for (let i = 0, j = 0; i < g.length; i++, j += 4) g[i] = (d[j] * 77 + d[j + 1] * 150 + d[j + 2] * 29) >> 8;
     return g;
+  }
+
+  /** Graustufen in Vollauflösung (max. 1920 px breit) für die Spitzenerkennung */
+  grabFull(mediaEl) {
+    const srcW = mediaEl.videoWidth || mediaEl.naturalWidth || 1280, srcH = mediaEl.videoHeight || mediaEl.naturalHeight || 720;
+    const sc = Math.min(1, 1920 / srcW), w = Math.round(srcW * sc), h = Math.round(srcH * sc);
+    if (!this._fc) { this._fc = document.createElement('canvas'); this._fx = this._fc.getContext('2d', { willReadFrequently: true }); }
+    if (this._fc.width !== w || this._fc.height !== h) { this._fc.width = w; this._fc.height = h; }
+    this._fx.drawImage(mediaEl, 0, 0, w, h);
+    const d = this._fx.getImageData(0, 0, w, h).data, g = new Uint8Array(w * h);
+    for (let i = 0, j = 0; i < g.length; i++, j += 4) g[i] = (d[j] * 77 + d[j + 1] * 150 + d[j + 2] * 29) >> 8;
+    return { g, w, h };
   }
 
   get w() { return this.cvs.width; } get h() { return this.cvs.height; }
@@ -1427,10 +1407,152 @@ class MotionDetector {
   }
 }
 
+/* ============================== Dartspitze + Flight aus der Differenz zweier Vollbilder ==============================
+ * Ablauf: Differenz Referenz/aktuell im Suchbereich -> Schwelle (an Bildrauschen angepasst) -> Schließen (dünner Schaft)
+ * -> größte zusammenhängende Fläche -> Hauptachse -> Breitenprofil: der BREITE Rand ist der Flight, der SCHMALE die Spitze.
+ * Die Spitze wird auf Subpixel aus den Randpixeln des schmalen Endes gemittelt. */
+class DartLocator {
+  /** Bildrichtung, in der ein Dart (senkrecht aus dem Board) von der Spitze zum Flight zeigt – aus der Board→Bild-Homographie (Brennweite aus Orthogonalität) */
+  static normalDirection(Hbi, w, h, bx, by) {
+    const cx = w / 2, cy = h / 2, col = j => [Hbi[0][j], Hbi[1][j], Hbi[2][j]];
+    const h1 = col(0), h2 = col(1), h3 = col(2), g = v => [v[0] - cx * v[2], v[1] - cy * v[2], v[2]];
+    const A = g(h1), B = g(h2); let f2 = -(A[0] * B[0] + A[1] * B[1]) / (A[2] * B[2]);
+    if (!(f2 > 0) || !isFinite(f2)) f2 = ((A[0] ** 2 + A[1] ** 2) - (B[0] ** 2 + B[1] ** 2)) / (B[2] ** 2 - A[2] ** 2);
+    const f = f2 > 0 && isFinite(f2) ? Math.sqrt(f2) : 0.9 * w;
+    const k = v => [(v[0] - cx * v[2]) / f, (v[1] - cy * v[2]) / f, v[2]];
+    let r1 = k(h1), r2 = k(h2), t = k(h3); const lam = Math.hypot(...r1) || 1;
+    r1 = r1.map(v => v / lam); r2 = r2.map(v => v / lam); t = t.map(v => v / lam);
+    if (t[2] < 0) { r1 = r1.map(v => -v); r2 = r2.map(v => -v); t = t.map(v => -v); }
+    let r3 = [r1[1] * r2[2] - r1[2] * r2[1], r1[2] * r2[0] - r1[0] * r2[2], r1[0] * r2[1] - r1[1] * r2[0]];
+    if (r3[2] > 0) r3 = r3.map(v => -v);                                         // zeigt zur Kamera
+    const P = [bx * r1[0] + by * r2[0] + t[0], bx * r1[1] + by * r2[1] + t[1], bx * r1[2] + by * r2[2] + t[2]];
+    const pr = q => ({ x: f * q[0] / q[2] + cx, y: f * q[1] / q[2] + cy });
+    const a = pr(P), b = pr([P[0] + 8 * r3[0], P[1] + 8 * r3[1], P[2] + 8 * r3[2]]), L = Math.hypot(b.x - a.x, b.y - a.y);
+    const pl = Math.hypot(...P) || 1, ang = Math.acos(Math.min(1, Math.abs((r3[0] * P[0] + r3[1] * P[1] + r3[2] * P[2]) / pl))) * 180 / Math.PI;   // Winkel Blickstrahl ↔ Board-Normale
+    return L > 0.05 ? { x: (b.x - a.x) / L, y: (b.y - a.y) / L, len: L, f, ang } : null;
+  }
+
+  /**
+   * @param ref,cur   Graustufen (Uint8Array, w*h), Referenz ohne den neuen Dart / aktuelles Bild
+   * @param box       Suchbereich {x0,y0,x1,y1} in Pixeln des Bildes (Vollauflösung)
+   * @param opts      { seed:{x,y} (bevorzugte Fläche), center:{x,y} (Board-Mitte im Bild, nur für unklare Fälle) }
+   * @returns { tip, flight, flightEnd, axis, conf, elong, ratio, area, compact } | null
+   */
+  static analyze(ref, cur, w, h, box, opts = {}) {
+    const x0 = Math.max(0, Math.floor(box.x0)), y0 = Math.max(0, Math.floor(box.y0)), x1 = Math.min(w, Math.ceil(box.x1)), y1 = Math.min(h, Math.ceil(box.y1));
+    const bw = x1 - x0, bh = y1 - y0; if (bw < 6 || bh < 6) return null;
+    const d = new Uint8Array(bw * bh), hist = new Uint32Array(256);
+    for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) { const v = Math.abs(cur[(y0 + y) * w + x0 + x] - ref[(y0 + y) * w + x0 + x]); d[y * bw + x] = v; hist[v]++; }
+    // Rauschpegel = Median der Differenz (die meisten Pixel sind unverändert)
+    let acc = 0, med = 0; for (let v = 0; v < 256; v++) { acc += hist[v]; if (acc >= bw * bh / 2) { med = v; break; } }
+    const T = Math.max(opts.minThreshold || 16, 4 * med + 10);
+    let m = new Uint8Array(bw * bh); for (let i = 0; i < m.length; i++) m[i] = d[i] > T ? 1 : 0;
+    m = DartLocator.erode(DartLocator.dilate(m, bw, bh), bw, bh);                  // Schließen: dünne Teile verbinden
+    // zusammenhängende Flächen (8er)
+    const lab = new Int32Array(bw * bh).fill(-1), comps = [];
+    for (let s = 0; s < m.length; s++) {
+      if (!m[s] || lab[s] >= 0) continue;
+      const id = comps.length, st = [s], px = []; lab[s] = id;
+      while (st.length) {
+        const p = st.pop(); px.push(p); const x = p % bw, y = (p / bw) | 0;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+          const nx = x + dx, ny = y + dy; if (nx < 0 || ny < 0 || nx >= bw || ny >= bh) continue;
+          const q = ny * bw + nx; if (m[q] && lab[q] < 0) { lab[q] = id; st.push(q); }
+        }
+      }
+      comps.push(px);
+    }
+    const minArea = opts.minArea || 12; const cand = comps.filter(c => c.length >= minArea); if (!cand.length) return null;
+    let best = cand[0];
+    if (opts.seed) {
+      const sx = opts.seed.x - x0, sy = opts.seed.y - y0; let bd = Infinity;
+      for (const c of cand) {                                                   // Fläche, die dem Seed am nächsten liegt (mit Gewicht für Größe)
+        let md = Infinity; for (let k = 0; k < c.length; k += Math.max(1, (c.length / 60) | 0)) { const p = c[k]; md = Math.min(md, Math.hypot(p % bw - sx, ((p / bw) | 0) - sy)); }
+        const score = md - 0.02 * c.length; if (score < bd) { bd = score; best = c; }
+      }
+    } else best = cand.reduce((a, b) => (b.length > a.length ? b : a));
+    const n = best.length, xs = new Float64Array(n), ys = new Float64Array(n);
+    let mx = 0, my = 0; for (let i = 0; i < n; i++) { xs[i] = best[i] % bw + x0 + 0.5; ys[i] = ((best[i] / bw) | 0) + y0 + 0.5; mx += xs[i]; my += ys[i]; }
+    mx /= n; my /= n;
+    if (opts.normalDir) {                                                         // Normalenrichtung bekannt: Flight zeigt zur Kamera, die Spitze ist das ENTGEGENGESETZTE Ende
+      const nd = opts.normalDir, pr = new Float64Array(n); let pmin = Infinity, pmax = -Infinity;
+      for (let i = 0; i < n; i++) { pr[i] = xs[i] * nd.x + ys[i] * nd.y; if (pr[i] < pmin) pmin = pr[i]; if (pr[i] > pmax) pmax = pr[i]; }
+      const ext = pmax - pmin, band = Math.max(1.5, 0.06 * ext);
+      let tx = 0, ty = 0, tn = 0, fx = 0, fy = 0, fn = 0, ex = 0, ey = 0, en = 0;
+      for (let i = 0; i < n; i++) {
+        if (pr[i] <= pmin + band) { tx += xs[i]; ty += ys[i]; tn++; }
+        if (pr[i] >= pmin + 0.62 * ext) { fx += xs[i]; fy += ys[i]; fn++; }
+        if (pr[i] >= pmax - band) { ex += xs[i]; ey += ys[i]; en++; }
+      }
+      const tip = { x: tx / tn, y: ty / tn }, flight = { x: fx / fn, y: fy / fn }, L = Math.hypot(flight.x - tip.x, flight.y - tip.y) || 1;
+      return { tip, flight, flightEnd: { x: ex / en, y: ey / en }, axis: { x: (flight.x - tip.x) / L, y: (flight.y - tip.y) / L }, conf: Math.min(0.95, 0.35 + ext / 60), elong: ext, ratio: 0, area: n, compact: ext < 12 };
+    }
+    // Achse = Richtung der größten Ausdehnung (längster Durchmesser): der Dart ist länger als der Flight breit ist
+    const extent = th => { const c = Math.cos(th), s2 = Math.sin(th); let lo = Infinity, hi = -Infinity; for (let i = 0; i < n; i += (n > 4000 ? 2 : 1)) { const t = xs[i] * c + ys[i] * s2; if (t < lo) lo = t; if (t > hi) hi = t; } return hi - lo; };
+    let ang = 0, bestE = -1;
+    for (let d = 0; d < 180; d += 3) { const e = extent(d * Math.PI / 180); if (e > bestE) { bestE = e; ang = d * Math.PI / 180; } }
+    for (let d = -3; d <= 3; d += 0.5) { const a2 = ang + d * Math.PI / 180, e = extent(a2); if (e > bestE) { bestE = e; ang = a2; } }
+    const ux = Math.cos(ang), uy = Math.sin(ang), vx = -uy, vy = ux;
+    const tt = new Float64Array(n), ss = new Float64Array(n); let tmin = Infinity, tmax = -Infinity, smin = Infinity, smax = -Infinity;
+    for (let i = 0; i < n; i++) { tt[i] = (xs[i] - mx) * ux + (ys[i] - my) * uy; ss[i] = (xs[i] - mx) * vx + (ys[i] - my) * vy; if (tt[i] < tmin) tmin = tt[i]; if (tt[i] > tmax) tmax = tt[i]; if (ss[i] < smin) smin = ss[i]; if (ss[i] > smax) smax = ss[i]; }
+    const len = tmax - tmin, elong = len / Math.max(1, smax - smin);
+    if (len < 12) {                                                              // winzig / kompakt (Dart zeigt fast direkt zur Kamera): Mittelpunkt, geringe Sicherheit
+      if (opts.normalDir) { const nd = opts.normalDir; let pm = Infinity; for (let i = 0; i < n; i++) pm = Math.min(pm, xs[i] * nd.x + ys[i] * nd.y); let a2 = 0, b2 = 0, c2 = 0; for (let i = 0; i < n; i++) if (xs[i] * nd.x + ys[i] * nd.y <= pm + 2) { a2 += xs[i]; b2 += ys[i]; c2++; } return { tip: { x: a2 / c2, y: b2 / c2 }, flight: { x: mx, y: my }, flightEnd: { x: mx, y: my }, axis: { x: -nd.x, y: -nd.y }, conf: 0.3, elong, ratio: 1, area: n, compact: true }; }
+      return { tip: { x: mx, y: my }, flight: { x: mx, y: my }, flightEnd: { x: mx, y: my }, axis: { x: ux, y: uy }, conf: 0.25, elong, ratio: 1, area: n, compact: true };
+    }
+    // Breitenprofil entlang der Achse: der Flight ist die breiteste Stelle, die Spitze liegt am ENTFERNTEN Ende
+    const nb = 16, cnt = new Float64Array(nb), lo = new Float64Array(nb).fill(Infinity), hi = new Float64Array(nb).fill(-Infinity);
+    for (let i = 0; i < n; i++) { const bi = Math.min(nb - 1, Math.floor(((tt[i] - tmin) / len) * nb)); if (ss[i] < lo[bi]) lo[bi] = ss[i]; if (ss[i] > hi[bi]) hi[bi] = ss[i]; }
+    for (let i = 0; i < nb; i++) cnt[i] = hi[i] >= lo[i] ? hi[i] - lo[i] + 1 : 0;   // seitliche Ausdehnung
+    const cmax = Math.max(...cnt); let wsum = 0, tsum = 0;
+    for (let i = 0; i < nb; i++) if (cnt[i] >= 0.6 * cmax) { wsum += cnt[i]; tsum += cnt[i] * (tmin + (i + 0.5) * len / nb); }
+    const tFlight = tsum / wsum;                                                 // Schwerpunkt der breiten Zone
+    let tipIsMin = Math.abs(tFlight - tmin) > Math.abs(tmax - tFlight);
+    const tipBins = tipIsMin ? [0, 1, 2] : [nb - 3, nb - 2, nb - 1], tipW = Math.max(1e-6, tipBins.reduce((s2, i) => s2 + cnt[i], 0) / 3), ratio = cmax / tipW;
+    if (Math.abs(Math.abs(tFlight - tmin) - Math.abs(tmax - tFlight)) < 0.1 * len && opts.center) {   // Flight genau in der Mitte: Ende nahe der Board-Mitte
+      const a = Math.hypot(mx + tmin * ux - opts.center.x, my + tmin * uy - opts.center.y), b = Math.hypot(mx + tmax * ux - opts.center.x, my + tmax * uy - opts.center.y);
+      tipIsMin = a < b;
+    }
+    if (opts.normalDir) {                                                         // Flight zeigt zur Kamera (Normalenrichtung) → Spitze = Gegenseite
+      const dot = ux * opts.normalDir.x + uy * opts.normalDir.y;
+      if (Math.abs(dot) > 0.25) tipIsMin = dot > 0;
+    }
+    const tTip = tipIsMin ? tmin : tmax, sgn = tipIsMin ? 1 : -1;
+    // Spitze: Mittel der Pixel im äußersten Stück (Subpixel)
+    let sx_ = 0, sy_ = 0, sn = 0; const span = Math.max(1.5, len * 0.05);
+    for (let i = 0; i < n; i++) if (Math.abs(tt[i] - tTip) <= span) { sx_ += xs[i]; sy_ += ys[i]; sn++; }
+    const tip = { x: sx_ / sn, y: sy_ / sn };
+    // Flight: Pixel in der breiten Zone
+    let fx = 0, fy = 0, fn = 0;
+    for (let i = 0; i < n; i++) { const bi = Math.min(nb - 1, Math.floor(((tt[i] - tmin) / len) * nb)); if (cnt[bi] >= 0.6 * cmax) { fx += xs[i]; fy += ys[i]; fn++; } }
+    const tFl = tipIsMin ? tmax : tmin; let ex = 0, ey = 0, en = 0;
+    for (let i = 0; i < n; i++) if (Math.abs(tt[i] - tFl) <= span) { ex += xs[i]; ey += ys[i]; en++; }
+    const conf = Math.min(1, (ratio - 1) / 0.8) * Math.min(1, elong / 3);
+    return { tip, flight: { x: fx / fn, y: fy / fn }, flightEnd: { x: ex / en, y: ey / en }, axis: { x: sgn * ux, y: sgn * uy }, conf, elong, ratio, area: n, compact: false };
+  }
+
+  static dilate(m, w, h) {
+    const o = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      let v = 0; for (let dy = -1; dy <= 1 && !v; dy++) for (let dx = -1; dx <= 1; dx++) { const nx = x + dx, ny = y + dy; if (nx >= 0 && ny >= 0 && nx < w && ny < h && m[ny * w + nx]) { v = 1; break; } }
+      o[y * w + x] = v;
+    }
+    return o;
+  }
+  static erode(m, w, h) {
+    const o = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      let v = 1; for (let dy = -1; dy <= 1 && v; dy++) for (let dx = -1; dx <= 1; dx++) { const nx = x + dx, ny = y + dy; if (nx < 0 || ny < 0 || nx >= w || ny >= h || !m[ny * w + nx]) { v = 0; break; } }
+      o[y * w + x] = v;
+    }
+    return o;
+  }
+}
+
 class TipLocator {
   constructor(cfg) { this.cfg = cfg; }
   async load() { return false; }
-  async locate(mediaEl, blob, motion, center) {
+  locateSync(mediaEl, blob, motion, center) {
     const srcW = mediaEl.videoWidth || mediaEl.naturalWidth || 1280;
     const srcH = mediaEl.videoHeight || mediaEl.naturalHeight || 720;
     const sx = srcW / motion.w, sy = srcH / motion.h;
@@ -1455,7 +1577,7 @@ class ScoreFeedback {
     this.root = el('div', 'adv-pop'); this.root.hidden = true;
     this.root.innerHTML = `
       <div class="adv-pop-main"><span class="adv-pop-label"></span><span class="adv-pop-pts"></span>
-        <button class="adv-btn adv-ok" data-a="ok">✓</button><button class="adv-btn" data-a="fix">Korrigieren</button></div>
+        <button class="adv-btn adv-ok" data-a="ok">${ICON.check}</button><button class="adv-btn" data-a="fix">Korrigieren</button></div>
       <div class="adv-pop-bar"><i></i></div>
       <div class="adv-pop-fix" hidden>
         <div class="adv-row adv-mult"></div><div class="adv-row adv-seg"></div>
@@ -1473,7 +1595,7 @@ class ScoreFeedback {
   show(res, cb) {
     this.commit();
     this.cur = { res, cb }; this.sel = { s: res.segment, m: res.multiplier };
-    this.lbl.textContent = `${res.label} erkannt`; this.pts.textContent = `${res.points} Pkt`;
+    this.lbl.textContent = `${res.label} erkannt` + (res.unsure ? ' (unsicher)' : ''); this.pts.textContent = `${res.points} Pkt`;
     this.fix.hidden = true; this.root.hidden = false; this.restartBar();
     clearTimeout(this.timer); this.timer = setTimeout(() => this.commit(), this.ms);
   }
@@ -1490,7 +1612,7 @@ class ScoreFeedback {
       const { s, m } = this.sel;
       const old = this.cur.res;
       this.cur.res = Scoring.make(s, s === 25 ? Math.min(m, 2) : m, {
-        board: old.board, cam: old.cam, confidence: old.confidence, source: old.source,
+        board: old.board, cam: old.cam, confidence: old.confidence, source: old.source, dartId: old.dartId, flight: old.flight,
         corrected: true, original: old.corrected ? old.original : old.label,
       });
       return this.commit();
@@ -1522,20 +1644,21 @@ class AutoDartsEngine {
     this.listeners = {};
     this.H = null; this.Hinv = null; this.camSize = null;
     this.state = 'idle'; this.still = 0; this.prev = null; this.reference = null; this.timer = null;
-    this.isScreenshotMode = false;
-    this.lsKey = LS_KEY; this.remoteMode = false;
+    this.isVideoFileMode = false; this.isScreenshotMode = false; this.activeMedia = null; this.lsKey = LS_KEY;
+    this.turnDarts = []; this.turnComplete = false; this.emptyRef = null; this.refFull = null; this.dartSeq = 0; this.shotPoint = null;
     this.motion = new MotionDetector(this.cfg.motion);
     this.tip = new TipLocator(this.cfg.tip);
   }
+
+  /** Bildquelle für Kalibrierung/Overlay: Screenshot oder Video/Stream */
+  get media() { return this.isScreenshotMode ? this.activeMedia : this.video; }
 
   on(ev, fn) { (this.listeners[ev] ||= []).push(fn); return this; }
   emit(ev, data) { (this.listeners[ev] || []).forEach(f => { try { f(data); } catch (e) { console.error(e); } }); }
 
   setStatus(t) { if (this.statusEl) this.statusEl.textContent = t; this.emit('status', t); }
 
-  /** DOM + Feedback-UI aufbauen (idempotent, ohne Kamera) */
-  init() {
-    if (this._inited) return; this._inited = true;
+  async start() {
     injectCss();
     const host = this.cfg.container; host.classList.add('adv-wrap');
     this.video = this.cfg.video || el('video'); this.video.playsInline = true; this.video.muted = true;
@@ -1543,351 +1666,98 @@ class AutoDartsEngine {
     if (!this.cfg.showVideo) { this.video.style.cssText = 'position:absolute;width:1px;height:1px;opacity:0'; }
     this.statusEl = el('div', 'adv-status'); host.append(this.statusEl);
     this.feedback = new ScoreFeedback(this.cfg.feedbackMs);
+
+    this.video.onloadedmetadata = () => this.onMedia();
+    this.video.addEventListener('resize', () => {                              // Auflösung des Streams geändert: Kalibrierung mitskalieren
+      const w = this.video.videoWidth, h = this.video.videoHeight;
+      if (w && this.camSize && !this.isScreenshotMode && (w !== this.camSize.w || h !== this.camSize.h)) this.onMedia();
+    });
   }
 
-  async start() {
-    this.init();
-    await this.openCamera();
+  /** Video/Stream hat Maße: gespeicherte Kalibrierung laden und Erkennung starten */
+  onMedia() {
+    if (this.isScreenshotMode) return;
+    this.stopDetection(); this.resetTurnState();
+    this.camSize = { w: this.video.videoWidth, h: this.video.videoHeight };
+    this.H = this.Hinv = null; this.motion.roi = null;
     this.loadHomography();
-    
-    if (!this.H) {
-      await this.calibrate();
-    }
-    
-    if (this.H) { 
-      this.beginDetection(); 
-    }
+    if (this.H) { this.beginDetection(); }
+    else if (this.isVideoFileMode) { this.setStatus('Video-Sequenz geladen – bitte kalibrieren'); this.calibrate(); }
+    else this.setStatus('Stream empfangen – bitte kalibrieren');
+    this.emit('media-ready', { calibrated: !!this.H });
   }
 
-  async openCamera() {
-    this.setStatus('Kamera wird gestartet …');
-    try {
-      this.stream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: { facingMode: this.cfg.facingMode, width: { ideal: this.cfg.resolution.width }, height: { ideal: this.cfg.resolution.height } },
-      });
-      this.video.srcObject = this.stream; await this.video.play();
-      if (!this.video.videoWidth) await new Promise(r => this.video.addEventListener('loadedmetadata', r, { once: true }));
-      this.camSize = { w: this.video.videoWidth, h: this.video.videoHeight };
-    } catch (e) {
-      console.warn('Webcam nicht verfügbar, nutze Screenshot-Modus als Standard:', e);
-      this.camSize = { w: 1280, h: 720 };
-    }
-  }
-
-  /** Handy-Stream als Kamerabild verwenden (Tablet-Kamera bleibt aus). Gespeicherte Kalibrierung der Handy-Kamera wird geladen. */
-  async useRemoteStream(stream) {
-    this.init();
-    this.stopDetection();
-    if (this.isScreenshotMode) {
-      this.isScreenshotMode = false; this.activeMedia = null;
-      const old = this.cfg.container.querySelector('img#screenshot-preview'); if (old) old.remove();
-    }
-    if (this.stream) { this.stream.getTracks().forEach(t => t.stop()); this.stream = null; }
-    this.remoteMode = true; this.lsKey = LS_KEY + '_phone';
-    this.video.style.display = ''; this.video.muted = true; this.video.playsInline = true;
+  loadRemoteStream(stream) {
+    this.exitScreenshot(true);
+    this.isVideoFileMode = false;
+    this.video.style.display = '';
+    if (this.video.getAttribute('src')) { this.video.removeAttribute('src'); this.video.loop = false; }
     this.video.srcObject = stream;
-    try { await this.video.play(); } catch (e) { console.warn('[Handy] play():', e.message); }
-    if (!this.video.videoWidth) await new Promise(r => { this.video.addEventListener('loadedmetadata', r, { once: true }); setTimeout(r, 4000); });
-    this.camSize = { w: this.video.videoWidth || 1280, h: this.video.videoHeight || 720 };
-    if (!this._resizeHook) { this._resizeHook = true; this.video.addEventListener('resize', () => this.onVideoResize()); }
+    this.video.play().catch(e => console.warn('Autoplay blockiert:', e));
+    if (this.video.videoWidth) this.onMedia();
+  }
+
+  loadVideoFile(fileUrl) {
+    this.exitScreenshot(true);
+    this.stopDetection();
+    this.isVideoFileMode = true;
+    this.video.style.display = '';
+    if (this.video.srcObject) { this.video.srcObject.getTracks().forEach(t => t.stop()); this.video.srcObject = null; }
+    this.video.src = fileUrl;
+    this.video.loop = true;
+    this.video.muted = true;
+    this.video.play().catch(e => console.warn('Video Autoplay blockiert:', e));
+  }
+
+  /* ---------------------------------------------------------------- Screenshot */
+
+  /** Ein Standbild (Screenshot/Foto) statt Live-Bild verwenden: kalibrieren, Raster prüfen, per Tipp den Score abfragen */
+  loadScreenshot(img) {
+    this.stopDetection(); this.resetTurnState();
+    this.isScreenshotMode = true; this.activeMedia = img; this.lsKey = LS_KEY + '_shot';   // Screenshot-Tests überschreiben die Live-Kalibrierung nicht
+    if (this.shotImg) this.shotImg.remove();
+    this.shotImg = img; img.id = 'screenshot-preview';
+    this.video.style.display = 'none'; this.cfg.container.prepend(img);
+    this.camSize = { w: img.naturalWidth, h: img.naturalHeight };
     this.H = this.Hinv = null; this.motion.roi = null; this.showGrid(false);
     this.loadHomography();
-    if (this.H) { this.setStatus(`Handy-Kamera verbunden (${this.camSize.w}×${this.camSize.h}) – Kalibrierung geladen`); this.beginDetection(); }
-    else this.setStatus(`Handy-Kamera verbunden (${this.camSize.w}×${this.camSize.h}) – bitte kalibrieren`);
-    this.emit('remote-ready', { calibrated: !!this.H, w: this.camSize.w, h: this.camSize.h });
+    if (!this._shotClick) { this._shotClick = e => this.onShotClick(e); this.cfg.container.addEventListener('pointerdown', this._shotClick); }
+    this.setStatus(this.H ? 'Screenshot geladen – Kalibrierung gefunden, tippe aufs Bild für den Score' : 'Screenshot geladen – Auto-Erkennung oder 15 Punkte setzen');
+    this.emit('media-ready', { calibrated: !!this.H, screenshot: true });
   }
 
-  /** Auflösung des Handy-Streams hat sich geändert (z. B. Befehl vom Tablet): Kalibrierung mitskalieren */
-  onVideoResize() {
-    if (!this.remoteMode || this.isScreenshotMode) return;
-    const w = this.video.videoWidth, h = this.video.videoHeight;
-    if (!w || (this.camSize && w === this.camSize.w && h === this.camSize.h)) return;
-    console.log(`[Handy] Auflösung geändert: ${w}×${h}`);
-    const hadGrid = !!this.gridCvs; this.stopDetection(); this.showGrid(false);
-    this.camSize = { w, h }; this.H = this.Hinv = null; this.motion.roi = null;
-    this.loadHomography();
-    if (this.H) { if (hadGrid) this.showGrid(true); this.beginDetection(); }
-    this.emit('remote-ready', { calibrated: !!this.H, w, h });
+  exitScreenshot(silent = false) {
+    if (!this.isScreenshotMode) return;
+    this.isScreenshotMode = false; this.activeMedia = null; this.lsKey = LS_KEY;
+    if (this.shotImg) this.shotImg.remove(); this.shotImg = null; this.shotPoint = null;
+    this.video.style.display = ''; this.clearMarks(); this.showGrid(false);
+    if (this._shotClick) { this.cfg.container.removeEventListener('pointerdown', this._shotClick); this._shotClick = null; }
+    if (!silent && this.video.videoWidth) this.onMedia();
+    this.emit('screenshot-exit');
   }
 
-  /** Verbindung zum Handy weg: Erkennung anhalten (Kalibrierung bleibt gespeichert) */
-  pauseRemote(msg) { this.stopDetection(); this.setStatus(msg || 'Handy-Verbindung unterbrochen – warte auf Wiederverbindung'); }
-
-  loadScreenshot(imgElement) {
-    this.stopDetection();
-    this.isScreenshotMode = true;
-    if (this.remoteMode) this.lsKey = LS_KEY + '_shot';        // Screenshot-Tests dürfen die Handy-Kalibrierung nicht überschreiben
-    if (this.stream) {
-      this.stream.getTracks().forEach(t => t.stop());
-    }
-    this.video.style.display = 'none';
-    
-    const oldImg = this.cfg.container.querySelector('img#screenshot-preview');
-    if (oldImg) oldImg.remove();
-
-    imgElement.id = 'screenshot-preview';
-    imgElement.style.cssText = 'display:block;width:100%;height:auto;object-fit:fill;';
-    this.cfg.container.prepend(imgElement);
-    
-    this.activeMedia = imgElement;
-    this.camSize = { w: imgElement.naturalWidth || 1280, h: imgElement.naturalHeight || 720 };
-    this.loadHomography();
-
-    if (!this.H) {
-      this.calibrate();
-    } else {
-      this.beginDetection();
-    }
-    this.setStatus('Screenshot-Modus aktiv');
+  onShotClick(e) {
+    if (!this.isScreenshotMode || this._calibrating || !this.H || !this.shotImg) return;
+    if (e.target.closest && e.target.closest('.adv-panel')) return;
+    const r = this.shotImg.getBoundingClientRect();
+    const x = (e.clientX - r.left) * this.camSize.w / r.width, y = (e.clientY - r.top) * this.camSize.h / r.height;
+    if (x < 0 || y < 0 || x > this.camSize.w || y > this.camSize.h) return;
+    const b = Homography.apply(this.H, x, y), res = Scoring.fromBoard(b.x, b.y, this.cfg.radii);
+    this.shotPoint = { x, y, label: res.label }; this.drawMarks();
+    this.setStatus(`Tipp: ${res.label} (${res.points} Punkte, Abstand ${(res.board.r * 170 / 91).toFixed(1)} mm vom Zentrum)`);
+    console.log(`[Screenshot] Tipp (${Math.round(x)}, ${Math.round(y)}) -> ${res.label} = ${res.points}`);
+    this.emit('photo-click', res);
   }
+
+  /* ---------------------------------------------------------------- Kalibrierung */
 
   loadHomography() {
     try {
       const raw = JSON.parse(localStorage.getItem(this.lsKey) || 'null');
       if (!raw || !raw.matrix) return;
       let H = raw.matrix;
-      if (raw.width && (raw.width !== this.camSize.w || raw.height !== this.camSize.h)) {
+      if (raw.width && this.camSize && (raw.width !== this.camSize.w || raw.height !== this.camSize.h)) {
         H = Homography.rescaleSource(H, raw.width / this.camSize.w, raw.height / this.camSize.h);
       }
       this.applyHomography(H);
-    } catch (e) { console.warn('[AutoDarts] Gespeicherte Homographie ungültig', e); }
-  }
-
-  applyHomography(H) {
-    const Hi = Homography.invert(H);
-    if (!Hi) throw new Error('Homographie nicht invertierbar');
-    this.H = H; this.Hinv = Hi;
-    this.motion.roi = null;
-  }
-
-  async calibrate(initial = null, note = '') {
-    this.stopDetection();
-    const mediaSource = this.isScreenshotMode ? this.activeMedia : this.video;
-
-    this.setStatus(initial ? 'Auto-Ergebnis prüfen …' : `Bitte ${ANCHOR_COUNT} Ankerpunkte setzen...`);
-    const pts = await new ManualCalibrationOverlay(this.cfg.container, mediaSource, this.cfg, initial, note).run();
-
-    if (!pts || pts.length !== ANCHOR_COUNT) {
-      this.setStatus('Kalibrierung abgebrochen');
-      return false;
-    }
-
-    const fit = Homography.fit(pts, CALIB_TARGETS);
-    if (!fit || fit.rms > 3) {
-      this.setStatus(fit ? `Kalibrierung ungenau – Punkt ${fit.worst + 1} prüfen (${fit.errors[fit.worst].toFixed(1)} px Abweichung)` : 'Kalibrierung ungültig – Punkte prüfen');
-      console.warn('[AutoDarts] Kalibrierung abgelehnt', fit && { rms: fit.rms, fehler: fit.errors.map(e => +e.toFixed(2)) });
-      return false;
-    }
-    const H = fit.H;
-    console.log(`[AutoDarts] ${ANCHOR_COUNT}-Punkte-Fit: Fehler Ø ${fit.rms.toFixed(2)} px (≈ ${(fit.rms * 170 / 91).toFixed(2)} mm)` + (fit.dropped.length ? `, ignoriert: Punkt ${fit.dropped.map(i => i + 1).join(', ')}` : ''));
-    this.applyHomography(H);
-    localStorage.setItem(this.lsKey, JSON.stringify({ matrix: H, width: this.camSize.w, height: this.camSize.h, method: `${ANCHOR_COUNT}-pt`, savedAt: Date.now() }));
-    this.setStatus(`${ANCHOR_COUNT}-Punkte Kalibrierung erfolgreich!`);
-    this.emit('calibrated', { matrix: H, method: `${ANCHOR_COUNT}-pt` });
-
-    // Sofort Raster anzeigen nach erfolgreicher Kalibrierung
-    this.showGrid(true);
-
-    if (this.running || !this.timer) this.beginDetection();
-    return true;
-  }
-
-  /** Automatische Erkennung (nur auf Knopfdruck, Live-Bild oder Screenshot); Ergebnis wird im Overlay zur Bestätigung vorbelegt */
-  async autoCalibrate() {
-    this.stopDetection();
-    const media = this.isScreenshotMode ? this.activeMedia : this.video;
-    if (!media || !(media.videoWidth || media.naturalWidth)) {
-      this.setStatus('Kein Bild – Kamera starten oder Screenshot laden');
-      return false;
-    }
-    this.setStatus('Auto-Erkennung läuft …');
-    let r = null;
-    try { r = await AutoBoardDetector.detect(media, this.cfg, m => this.setStatus(m)); }
-    catch (e) { console.warn('[Auto] nicht möglich:', e.message); this.setStatus('Auto-Erkennung nicht möglich: ' + e.message); }
-    if (!r) {
-      this.setStatus('Board nicht sicher erkannt – bitte Punkte manuell setzen');
-      return this.calibrate();
-    }
-    console.log(`[Auto] fertig: Konfidenz ${Math.round(r.confidence * 100)} %, ${r.ms} ms (Arbeitsbreite ${r.width} px), ${r.pxPerMm.toFixed(2)} px/mm, ${r.refined ? r.nStations + ' Subpixel-Messpunkte' : 'ohne Subpixel'}`);
-    return this.calibrate(r.points, `Auto ${Math.round(r.confidence * 100)} % sicher` + (r.refined ? ', Subpixel' : ', grob') + (r.fp < 0.8 ? ' (unsicher – genau prüfen)' : ''));
-  }
-
-  clearCalibration() { localStorage.removeItem(this.lsKey); this.H = this.Hinv = null; this.stopDetection(); }
-
-  showGrid(on = true) {
-    this.gridCvs?.remove(); this.gridCvs = null;
-    if (!on || !this.Hinv) return;
-    const c = this.gridCvs = el('canvas', 'adv-cal-canvas'); c.style.pointerEvents = 'none';
-    c.width = this.camSize.w; c.height = this.camSize.h;
-    drawBoardOverlay(c.getContext('2d'), this.Hinv, this.cfg.radii);
-    this.cfg.container.append(c);
-  }
-
-  beginDetection() {
-    this.running = true; this.state = 'init'; this.still = 0; this.prev = null; this.reference = null;
-    const mediaSource = this.isScreenshotMode ? this.activeMedia : this.video;
-    this.motion.grab(mediaSource);
-    this.motion.buildRoi(this.H, this.camSize.w, this.camSize.h);
-    clearInterval(this.timer);
-    this.timer = setInterval(() => this.tick(), 1000 / this.cfg.motion.fps);
-    this.setStatus(this.isScreenshotMode ? 'Screenshot aktiv – klicke "Darts gezogen" zum Testen' : 'Warte auf leeres Board …');
-  }
-
-  stopDetection() { clearInterval(this.timer); this.timer = null; this.state = 'idle'; }
-
-  newTurn() { 
-    if (this.H) { 
-      this.state = 'init'; 
-      this.still = 0; 
-      this.reference = null; 
-      const mediaSource = this.isScreenshotMode ? this.activeMedia : this.video;
-      if (mediaSource) {
-        this.reference = this.motion.grab(mediaSource);
-        this.state = 'armed';
-        this.setStatus('Referenzbild gesetzt! Teste nun einen Wurf/Veränderung.');
-      }
-    } 
-  }
-
-  tick() {
-    const mediaSource = this.isScreenshotMode ? this.activeMedia : this.video;
-    if (!mediaSource || (!this.isScreenshotMode && mediaSource.readyState < 2) || (!this.motion.roi && !this.prepareRoi())) return;
-    const g = this.motion.grab(mediaSource), m = this.cfg.motion;
-    const ratio = this.prev ? this.motion.diff(g, this.prev).ratio : 0;
-    this.prev = g;
-    switch (this.state) {
-      case 'init':
-        this.still = ratio < m.stillRatio ? this.still + 1 : 0;
-        if (this.still >= m.stillFrames) { this.reference = g; this.state = 'armed'; this.setStatus('Bereit'); }
-        break;
-      case 'armed':
-        if (ratio > m.startRatio) { this.state = 'moving'; this.still = 0; this.setStatus('Bewegung …'); }
-        break;
-      case 'moving':
-        this.still = ratio < m.stillRatio ? this.still + 1 : 0;
-        if (this.still >= m.stillFrames) this.settled(g);
-        break;
-    }
-  }
-
-  prepareRoi() { if (!this.H) return false; this.motion.buildRoi(this.H, this.camSize.w, this.camSize.h); return true; }
-
-  async settled(g) {
-    this.state = 'busy';
-    const m = this.cfg.motion, d = this.motion.diff(g, this.reference);
-    const mediaSource = this.isScreenshotMode ? this.activeMedia : this.video;
     
-    const blobs = this.motion.blobs(d.mask);
-    if (!blobs.length) { this.reference = g; this.state = 'armed'; this.setStatus('Bereit'); return; }
-
-    const center = Homography.apply(this.Hinv, BOARD.cx, BOARD.cy);
-    const tip = await this.tip.locate(mediaSource, blobs[0], this.motion, center);
-    const b = Homography.apply(this.H, tip.x, tip.y);
-    const res = Scoring.fromBoard(b.x, b.y, this.cfg.radii);
-
-    this.reference = this.prev || g;
-    this.state = 'armed';
-    if (!isFinite(res.board.r) || res.board.r > m.maxScoreRadius) { this.setStatus('Bereit'); this.emit('detect-failed', { tip }); return; }
-
-    Object.assign(res, { cam: { x: tip.x, y: tip.y }, confidence: tip.confidence, source: tip.source });
-    this.setStatus(`${res.label} (${tip.source})`);
-    this.emit('throw', res);
-    this.feedback.show(res, final => this.submit(final));
-  }
-
-  submit(res) {
-    this.emit('hit', res);
-    if (typeof this.cfg.onHit === 'function') return this.cfg.onHit(res);
-    if (typeof window.SetHitDart === 'function') return window.SetHitDart(res.base, res.multiplier);
-    if (typeof window.hit === 'function') return window.hit(res.points);
-  }
-
-  destroy() {
-    this.stopDetection(); if (this.stream) this.stream.getTracks().forEach(t => t.stop());
-    this.feedback?.destroy(); this.statusEl?.remove(); this.gridCvs?.remove();
-  }
-}
-
-document.addEventListener('DOMContentLoaded', async () => {
-    const $ = id => document.getElementById(id);
-    const dot = $('status-dot'), statusEl = $('calibration-status'), list = $('throw-list'), totalEl = $('throw-total');
-    let total = 0, gridOn = true;
-
-    const engine = new AutoDartsEngine({
-        container: document.querySelector('.camera-wrapper'),
-        video: $('webcam'),
-        onHit: r => {
-            total += r.points; totalEl.textContent = total;
-            const row = document.createElement('div'); row.className = 'throw-row';
-            row.innerHTML = `<span>${r.label}${r.corrected ? ' <small>(korrigiert)</small>' : ''}</span><span>${r.points}</span>`;
-            list.prepend(row);
-        },
-    });
-    window.dartEngine = engine;
-    loadOpenCV(engine.cfg.opencvUrl).then(() => console.log('✅ OpenCV.js bereit – Auto-Erkennung einsatzbereit'), e => console.warn('⚠️ OpenCV.js: ' + e.message));
-
-    const syncDot = () => dot.classList.toggle('calibrated', !!engine.H);
-    engine.on('status', t => { statusEl.textContent = t; syncDot(); });
-    engine.on('calibrated', () => { syncDot(); engine.showGrid(gridOn); });
-
-    $('btn-reset').addEventListener('click', async () => { engine.clearCalibration(); engine.showGrid(false); syncDot(); await engine.calibrate(); });
-    $('btn-manual').addEventListener('click', () => engine.calibrate());
-    $('btn-auto').addEventListener('click', () => engine.autoCalibrate());
-    $('btn-ref').addEventListener('click', () => engine.newTurn());
-    $('btn-grid').addEventListener('click', () => { gridOn = !gridOn; engine.showGrid(gridOn); });
-
-    // Screenshot Upload Logik
-    $('btn-upload').addEventListener('click', () => $('screenshot-input').click());
-    $('screenshot-input').addEventListener('change', e => {
-        const file = e.target.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = event => {
-            const img = new Image();
-            img.onload = () => {
-                engine.loadScreenshot(img);
-                syncDot();
-                engine.showGrid(gridOn && !!engine.H);
-            };
-            img.src = event.target.result;
-        };
-        reader.readAsDataURL(file);
-    });
-
-    // ---------- Handy-Kamera ----------
-    const source = localStorage.getItem('dartly_cam_source') || 'phone';
-    const needMedia = () => engine.isScreenshotMode || (engine.video && engine.video.videoWidth > 0);
-    const guard = fn => () => { if (!needMedia()) { statusEl.textContent = 'Erst das Handy verbinden (oder einen Screenshot laden).'; return; } fn(); };
-    if (source === 'phone') {
-        $('btn-manual').addEventListener('click', e => { if (!needMedia()) { e.stopImmediatePropagation(); statusEl.textContent = 'Erst das Handy verbinden (oder einen Screenshot laden).'; } }, true);
-        $('btn-auto').addEventListener('click', e => { if (!needMedia()) { e.stopImmediatePropagation(); statusEl.textContent = 'Erst das Handy verbinden (oder einen Screenshot laden).'; } }, true);
-    }
-
-    async function setupPhone() {
-        const ph = { link: null, caps: null, torch: false, locked: false, statTimer: null, info: '', netInfo: '' };
-        const setPS = (t, ok) => { $('phone-status').textContent = t; $('phone-dot').classList.toggle('calibrated', !!ok); };
-        let api;
-        try {
-            if (!window.DartlyPhoneReady) throw new Error('Modul nicht geladen');
-            api = await window.DartlyPhoneReady;
-        } catch (e) {
-            setPS('Handy-Modul nicht verfügbar: ' + e.message + ' (firebase_config.js neben der Seite? Seite über https öffnen?)');
-            return;
-        }
-        const renderInfo = () => { $('phone-info').innerHTML = [ph.netInfo, ph.info].filter(Boolean).join('<br>'); };
-        const renderPair = async code => {
-            $('phone-code').textContent = code.slice(0, 3) + ' ' + code.slice(3);
-            const url = new URL('stream.html', location.href); url.searchParams.set('code', code);
-            $('phone-link').textContent = url.href; $('phone-link').href = url.href;
-            try {
-                if (!window.QRCode) await new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js'; s.onload = res; s.onerror = rej; document.head.appendChild(s); });
-                $('phone-qr').innerHTML = ''; new window.QRCode($('phone-qr'), { text: url.href, width: 170, height: 170, correctLevel: window.QRCode.CorrectLevel.M });
-            } catch (_) { $('phone-qr').innerHTML = ''; }               // ohne Internet: nur Code + Link
-            if (location.protocol === 'file:') setPS('Hinweis: Seite liegt als Datei vor – das Handy braucht eine https-Adresse (z. B. GitHub Pages).');
-        };
-        const showCtrl = on => { $('phone-ctrl').hidden = !on; $('phone-pair').hidden = on; };
-        const applyCaps = c => {
-            ph.caps = c || {};
-            $('pc-torch').disabled = !ph.caps.torch;
-     
