@@ -187,6 +187,11 @@
             pointer-events: none; backdrop-filter: blur(4px);
         }
         .detection-debug strong { display:block; color:#00ff88; font-size:11px; margin-bottom:2px; }
+        .detection-debug canvas { display:block; width:100%; height:auto; margin:5px 0; border:1px solid rgba(255,255,255,.18); image-rendering:pixelated; }
+        .diff-meter { position:relative; height:6px; margin:7px 0 2px; border-radius:5px; background:rgba(255,255,255,.14); overflow:visible; }
+        .diff-meter i { display:block; height:100%; width:0; border-radius:5px; background:#00ff88; }
+        .diff-meter b { position:absolute; top:-2px; width:2px; height:10px; background:#fff; transform:translateX(-50%); }
+        .diff-legend { display:flex; justify-content:space-between; color:rgba(255,255,255,.72); font-size:9px; }
 
         video#webcam, img#screenshot-preview {
             display: block;
@@ -300,7 +305,11 @@
         .accuracy-panel { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-top:10px; padding:10px 14px; border:1px solid var(--glass-border); border-radius:12px; background:rgba(0,0,0,.24); font-size:.86rem; }
         .accuracy-panel strong { color:var(--accent); }
         .accuracy-panel small { color:var(--text-gray); }
-        .accuracy-panel button { margin-left:auto; }
+        .accuracy-panel #accuracy-reset { margin-left:auto; }
+        .accuracy-panel #training-export { margin-left:0; }
+        .advanced-options { margin-top:12px; border:1px solid var(--glass-border); border-radius:12px; background:rgba(0,0,0,.16); }
+        .advanced-options summary { padding:10px 14px; cursor:pointer; color:var(--text-gray); font-weight:600; }
+        .advanced-options[open] { padding:0 12px 12px; }
         .pips { display:inline-flex; gap:7px; }
         .dart-pip { width:14px; height:14px; border-radius:50%; border:2px solid rgba(255,255,255,.35); display:inline-block; }
         .dart-pip.on { background:#ff2d2d; border-color:#fff; }
@@ -351,7 +360,15 @@
             <!-- Kamera & Video Viewport -->
             <div class="camera-wrapper">
                 <video id="webcam" autoplay playsinline muted></video>
-                <div class="detection-debug" id="detection-debug" hidden><strong>Bildvergleich</strong><span id="debug-state">Warte auf Bild</span><br><span id="debug-diff">Änderung: —</span></div>
+                <div class="detection-debug" id="detection-debug" hidden>
+                    <strong>Differenzbild · Live</strong>
+                    <canvas id="diff-preview" width="160" height="90" aria-label="Live-Differenzbild; grün markiert geänderte Pixel"></canvas>
+                    <small>Grün = geänderte Bildpunkte</small>
+                    <span id="debug-state">Warte auf Bild</span><br><span id="debug-diff">Änderung: —</span>
+                    <div class="diff-meter" aria-hidden="true"><i id="diff-meter-fill"></i><b style="left:25%"></b><b style="left:60%;background:#ffb454"></b></div>
+                    <div class="diff-legend"><span>0 %</span><span>5 %</span><span>12 %</span><span>20 %</span></div>
+                    <small>5 % Orientierung · Handfilter ab 12 %</small>
+                </div>
                 <input type="file" id="video-upload-input" accept="video/*" style="display: none;">
                 <input type="file" id="image-upload-input" accept="image/*" style="display: none;">
             </div>
@@ -372,9 +389,8 @@
                     <span id="calibration-status">Initialisiere...</span>
                 </div>
                 <div class="btn-group">
-                    <button class="btn-action" id="btn-grid">Raster</button>
-                    <button class="btn-action" id="btn-auto" style="background: rgba(0,255,136,0.15); border-color: rgba(0,255,136,0.4);"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>Auto-Erkennung</button>
-                    <button class="btn-action" id="btn-manual">15-Punkte Kalibrierung</button>
+                    <button class="btn-action" id="btn-auto" style="background: rgba(0,255,136,0.15); border-color: rgba(0,255,136,0.4);"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>Auto-Kalibrierung</button>
+                    <button class="btn-action" id="btn-manual">19-Punkte-Raster</button>
                     <button class="btn-action" id="btn-upload-vid" style="background: rgba(0,150,255,0.2); border-color: rgba(0,150,255,0.4);"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4"/></svg>Video analysieren</button>
                     <button class="btn-action" id="btn-upload-img" style="background: rgba(255,170,0,0.15); border-color: rgba(255,170,0,0.45);"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.8"/><path d="M21 16l-5-5-8 8"/></svg>Screenshot laden</button>
                     <button class="btn-action" id="btn-live" hidden><svg class="ico" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>Zurück zur Live-Ansicht</button>
@@ -384,18 +400,22 @@
 
 
             <div class="turn-hud"><span class="pips" id="turn-pips"></span><span id="turn-text">Bereit – Darts werfen</span></div>
-            <div class="accuracy-panel" aria-live="polite"><strong>Erkennungsquote: <span id="accuracy-percent">—</span></strong><span id="accuracy-counts">Noch keine Würfe bewertet</span><small>Nur deine Bewertungen zählen.</small><button class="btn-action" id="accuracy-reset" type="button">Zurücksetzen</button></div>
-            <div class="mark-opts">
-                <label><input type="checkbox" id="mk-tip"> Dartspitze (roter Punkt)</label>
-                <label><input type="checkbox" id="mk-flight"> Flight markieren</label>
-                <label><input type="checkbox" id="mk-label"> Beschriftung</label>
-            </div>
-            <div class="level-row">
-                <div class="level-head"><span><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>Auto-Genauigkeit</span><b id="auto-level-name">Standard</b></div>
-                <input type="range" id="auto-level" min="1" max="5" step="1" value="3">
-                <div class="level-scale"><span>Minimal</span><span>Maximal</span></div>
-                <div class="level-hint" id="auto-level-hint"></div>
-            </div>
+            <div class="accuracy-panel" aria-live="polite"><strong>Erkennungsquote: <span id="accuracy-percent">—</span></strong><span id="accuracy-counts">Noch keine Würfe bewertet</span><small>Nur deine Bewertungen zählen.</small><span id="training-count">0 Trainingsbilder · lokal gespeichert</span><button class="btn-action" id="accuracy-reset" type="button">Quote zurücksetzen</button><button class="btn-action" id="training-export" type="button">Trainingsdaten exportieren</button></div>
+            <details class="advanced-options">
+                <summary>Erweiterte Anzeige- und Erkennungsoptionen</summary>
+                <button class="btn-action" id="btn-grid" type="button">Kalibrierungsraster ein-/ausblenden</button>
+                <div class="mark-opts">
+                    <label><input type="checkbox" id="mk-tip"> Dartspitze (roter Punkt)</label>
+                    <label><input type="checkbox" id="mk-flight"> Flight markieren</label>
+                    <label><input type="checkbox" id="mk-label"> Beschriftung</label>
+                </div>
+                <div class="level-row">
+                    <div class="level-head"><span><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>Auto-Genauigkeit</span><b id="auto-level-name">Standard</b></div>
+                    <input type="range" id="auto-level" min="1" max="5" step="1" value="3">
+                    <div class="level-scale"><span>Minimal</span><span>Maximal</span></div>
+                    <div class="level-hint" id="auto-level-hint"></div>
+                </div>
+            </details>
 
             <p class="info-box">
                 Empfange das Live-Bild via P2P vom Handy, lade einen Screenshot oder ein Aufnahme-Video hoch, stoppe es an der Stelle, an der die Darts stecken, und kalibriere/analysiere sie präzise.
@@ -457,7 +477,7 @@
 </script>
 
 <script>
-const LS_KEY = 'dartly_camera_homography_11pt';
+const LS_KEY = 'dartly_camera_homography_19pt_fit_v2';
 const BOARD = { size: 200, cx: 100, cy: 100, rOuter: 91 };
 const SECTOR_ORDER = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5];
 const BOARD_MM = { bullseye: 6.35, singleBull: 15.9, tripleInner: 99, tripleOuter: 107, doubleInner: 162, doubleOuter: 170 };
@@ -476,15 +496,15 @@ const DEFAULTS = {
   opencvUrl: 'https://docs.opencv.org/4.x/opencv.js',
   radii: DEFAULT_RADII,
   motion: {
-    width: 160,
-    fps: 15,
-    pixelThreshold: 18,
-    startRatio: 0.004,
-    refRatio: 0.0012,            // Änderung gegenüber der Referenz, ab der geprüft wird (kleine, ruhig einschlagende Darts)
-    stillRatio: 0.0015,
-    stillFrames: 10,
-    maxChangeRatio: 0.12,
-    minBlobPixels: 3,
+    width: 277, // ca. 3x Gesamtpixelzahl gegenüber 160px Arbeitsbreite
+    fps: 5,
+    pixelThreshold: 8,
+    startRatio: 0.0007,
+    refRatio: 0.00025,            // Änderung gegenüber der Referenz, ab der geprüft wird (kleine, ruhig einschlagende Darts)
+    stillRatio: 0.00045,
+    stillFrames: 3,
+    maxChangeRatio: 0.25,
+    minBlobPixels: 2,
     roiRadius: 125,
     maxScoreRadius: 115,
   },
@@ -506,28 +526,40 @@ const DEFAULTS = {
 
 const ANCHOR_DEFINITIONS = [
   { deg: null, label: 'Punkt 1: Bullseye (Zentrum)', isCenter: true },
-  { deg: 9,   label: 'Punkt 2: Doppelring außen, Draht 20 | 1 (oben)' },
-  { deg: 45,  label: 'Punkt 3: Doppelring außen, Draht 18 | 4 (oben rechts)' },
-  { deg: 81,  label: 'Punkt 4: Doppelring außen, Draht 6 | 13 (rechts)' },
-  { deg: 117, label: 'Punkt 5: Doppelring außen, Draht 10 | 15 (unten rechts)' },
-  { deg: 153, label: 'Punkt 6: Doppelring außen, Draht 2 | 17 (unten rechts)' },
-  { deg: 189, label: 'Punkt 7: Doppelring außen, Draht 3 | 19 (unten)' },
-  { deg: 225, label: 'Punkt 8: Doppelring außen, Draht 7 | 16 (unten links)' },
-  { deg: 261, label: 'Punkt 9: Doppelring außen, Draht 8 | 11 (links)' },
-  { deg: 297, label: 'Punkt 10: Doppelring außen, Draht 14 | 9 (oben links)' },
-  { deg: 333, label: 'Punkt 11: Doppelring außen, Draht 12 | 5 (oben links)' },
-  { deg: 27,  ring: 'triple', label: 'Punkt 12: Triple-Ring außen, Draht 1 | 18 (oben rechts)' },
-  { deg: 117, ring: 'triple', label: 'Punkt 13: Triple-Ring außen, Draht 10 | 15 (unten rechts)' },
-  { deg: 207, ring: 'triple', label: 'Punkt 14: Triple-Ring außen, Draht 19 | 7 (unten links)' },
-  { deg: 297, ring: 'triple', label: 'Punkt 15: Triple-Ring außen, Draht 14 | 9 (oben links)' },
+  { deg: 9, ring: 'singleBull', label: 'Punkt 2: Außenkante Single Bull (Radius)' },
+  { deg: 9, ring: 'double', label: 'Punkt 3: Doppelring außen, Draht 20 | 1 (oben)' },
+  { deg: 45, ring: 'double', label: 'Punkt 4: Doppelring außen, Draht 18 | 4 (oben rechts)' },
+  { deg: 81, ring: 'double', label: 'Punkt 5: Doppelring außen, Draht 6 | 13 (rechts)' },
+  { deg: 117, ring: 'double', label: 'Punkt 6: Doppelring außen, Draht 10 | 15 (unten rechts)' },
+  { deg: 153, ring: 'double', label: 'Punkt 7: Doppelring außen, Draht 2 | 17 (unten rechts)' },
+  { deg: 189, ring: 'double', label: 'Punkt 8: Doppelring außen, Draht 3 | 19 (unten)' },
+  { deg: 225, ring: 'double', label: 'Punkt 9: Doppelring außen, Draht 7 | 16 (unten links)' },
+  { deg: 261, ring: 'double', label: 'Punkt 10: Doppelring außen, Draht 8 | 11 (links)' },
+  { deg: 297, ring: 'double', label: 'Punkt 11: Doppelring außen, Draht 14 | 9 (oben links)' },
+  { deg: 333, ring: 'double', label: 'Punkt 12: Doppelring außen, Draht 12 | 5 (oben links)' },
+  { deg: 27, ring: 'triple', label: 'Punkt 13: Triple-Ring außen (oben rechts)' },
+  { deg: 81, ring: 'triple', label: 'Punkt 14: Triple-Ring außen (rechts oben)' },
+  { deg: 135, ring: 'triple', label: 'Punkt 15: Triple-Ring außen (rechts unten)' },
+  { deg: 189, ring: 'triple', label: 'Punkt 16: Triple-Ring außen (unten)' },
+  { deg: 243, ring: 'triple', label: 'Punkt 17: Triple-Ring außen (links unten)' },
+  { deg: 297, ring: 'triple', label: 'Punkt 18: Triple-Ring außen (links oben)' },
+  { deg: 351, ring: 'triple', label: 'Punkt 19: Triple-Ring außen (oben)' },
 ];
 const ANCHOR_COUNT = ANCHOR_DEFINITIONS.length;
 
 const CALIB_TARGETS = ANCHOR_DEFINITIONS.map(w => {
   if (w.isCenter) return { label: w.label, x: BOARD.cx, y: BOARD.cy };
-  const t = (w.deg - 90) * Math.PI / 180, r = w.ring === 'triple' ? DEFAULT_RADII.tripleOuter : BOARD.rOuter;
+  const t = (w.deg - 90) * Math.PI / 180;
+  const r = w.ring === 'singleBull' ? DEFAULT_RADII.singleBull : (w.ring === 'triple' ? DEFAULT_RADII.tripleOuter : BOARD.rOuter);
   return { label: w.label, x: BOARD.cx + r * Math.cos(t), y: BOARD.cy + r * Math.sin(t) };
 });
+
+function pxPerMmFromAnchors(points) {
+  const center = points[ANCHOR_DEFINITIONS.findIndex(a => a.isCenter)];
+  if (!center) return 0;
+  const outer = ANCHOR_DEFINITIONS.flatMap((a, i) => a.ring === 'double' ? [Math.hypot(points[i].x - center.x, points[i].y - center.y)] : []);
+  return outer.length ? outer.reduce((s, d) => s + d, 0) / outer.length / BOARD_MM.doubleOuter : 0;
+}
 
 class Homography {
   static normalize(pts) {
@@ -1052,7 +1084,7 @@ class AutoBoardDetector {
   /**
    * Erkennung (Stufe über cfg.autoLevel 1–5): Arbeitsbreiten durchprobieren, Sektor-Muster prüfen, Subpixel-Fit auf allen Ring-/Speichenkanten
    * (Fangbereich ca. ±12 px), danach ALLE Drahtkreuzungen (80) per robustem Fit; beide Ergebnisse werden gemittelt.
-   * Rückgabe: { points (15 Anker in Originalpixeln), fp, confidence, width, ms, refined, crossings, pxPerMm, uncertain } oder null
+   * Rückgabe: { points (19 Anker in Originalpixeln), fp, confidence, width, ms, refined, crossings, pxPerMm, uncertain } oder null
    */
   static async detect(media, cfg, progress = () => {}) {
     const srcW = media.videoWidth || media.naturalWidth, srcH = media.videoHeight || media.naturalHeight;
@@ -1088,7 +1120,7 @@ class AutoBoardDetector {
           const fc = AutoBoardDetector.fitCrossings(gray, gw, gh, Hb), Hb2 = fc && Homography.invert(fc.Hcb);
           if (Hb2) {
             const ptsB = toSrc(Hb2, gw, gh);
-            const pxmm0 = ptsA.slice(1, 11).reduce((s, p) => s + Math.hypot(p.x - ptsA[0].x, p.y - ptsA[0].y), 0) / 10 / 170;
+            const pxmm0 = pxPerMmFromAnchors(ptsA);
             const dev = ptsA.reduce((s, p, i) => s + Math.hypot(p.x - ptsB[i].x, p.y - ptsB[i].y), 0) / ptsA.length / pxmm0;
             console.log(`[Auto] ${fc.n}/${fc.found} Drahtkreuzungen, Abweichung zum Kantenfit Ø ${dev.toFixed(2)} mm`);
             if (dev < 1.5) { ptsA = ptsA.map((p, i) => ({ x: (p.x + ptsB[i].x) / 2, y: (p.y + ptsB[i].y) / 2 })); crossings = fc.n; }
@@ -1097,7 +1129,7 @@ class AutoBoardDetector {
         points = ptsA;
       }
     }
-    const pxPerMm = points.slice(1, 11).reduce((s, p) => s + Math.hypot(p.x - points[0].x, p.y - points[0].y), 0) / 10 / 170;
+    const pxPerMm = pxPerMmFromAnchors(points);
     const confidence = Math.min(1, 0.5 * best.fp + 0.5 * Math.min(1, best.lad / 0.8));
     return { points, fp: best.fp, confidence, width: best.width, ms: Math.round(performance.now() - t0), refined, crossings, pxPerMm, uncertain };
   }
@@ -1170,8 +1202,8 @@ function injectCss() {
   s.id = 'adv-css';
   s.textContent = `
 .adv-wrap{position:relative;overflow:hidden;background:#000}
-.adv-cal-canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:crosshair}
-.adv-loupe{position:absolute;right:8px;top:8px;width:144px;height:144px;border:2px solid #fff;border-radius:50%;pointer-events:none;display:none;background:#000;box-shadow:0 2px 10px rgba(0,0,0,.6)}
+.adv-cal-canvas{position:absolute;inset:auto;width:auto;height:auto;touch-action:none;cursor:crosshair}
+.adv-loupe{position:absolute;left:auto;right:auto;top:auto;bottom:auto;width:144px;height:144px;border:2px solid #fff;border-radius:50%;pointer-events:none;display:none;background:#000;box-shadow:0 2px 10px rgba(0,0,0,.6)}
 .adv-status{position:absolute;left:8px;top:8px;padding:4px 10px;border-radius:12px;background:rgba(0,0,0,.65);color:#fff;font:600 12px system-ui,sans-serif;pointer-events:none}
 .adv-panel{position:absolute;left:0;right:0;bottom:0;padding:10px;background:rgba(10,12,18,.88);color:#fff;font:14px system-ui,sans-serif;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .adv-panel .adv-msg{flex:1 1 100%;font-weight:600}
@@ -1262,6 +1294,25 @@ function pxPerMmOf(H) {
   return (s / 4 / 80) * (BOARD.rOuter / 170);
 }
 
+// Gleiche object-fit:contain-Fläche wie Video/Foto verwenden, damit Pixelkoordinaten
+// und Canvas-Layer nicht auf den quadratischen Letterbox-Rahmen gestreckt werden.
+function containedImageRect(host, sourceWidth, sourceHeight) {
+  const width = host.clientWidth, height = host.clientHeight;
+  if (!width || !height || !sourceWidth || !sourceHeight) return { left: 0, top: 0, width, height };
+  const scale = Math.min(width / sourceWidth, height / sourceHeight);
+  const drawWidth = sourceWidth * scale, drawHeight = sourceHeight * scale;
+  return { left: (width - drawWidth) / 2, top: (height - drawHeight) / 2, width: drawWidth, height: drawHeight };
+}
+
+function alignContainedCanvas(canvas, host, sourceWidth, sourceHeight) {
+  const r = containedImageRect(host, sourceWidth, sourceHeight);
+  Object.assign(canvas.style, {
+    inset: 'auto', left: `${r.left}px`, top: `${r.top}px`, right: 'auto', bottom: 'auto',
+    width: `${r.width}px`, height: `${r.height}px`,
+  });
+  return r;
+}
+
 class ManualCalibrationOverlay {
   constructor(host, mediaSource, cfg, initial = null, note = '') {
     this.host = host; this.mediaSource = mediaSource; this.cfg = cfg; this.note = note;
@@ -1287,24 +1338,44 @@ class ManualCalibrationOverlay {
         const r = cvs.getBoundingClientRect();
         return { x: (e.clientX - r.left) * cvs.width / r.width, y: (e.clientY - r.top) * cvs.height / r.height, k: cvs.width / r.width };
       };
+      let loupePoint = null;
       const showLoupe = p => {
-        if (!p) { loupe.style.display = 'none'; return; }
-        const inRight = p.x < w / 2, inBottom = p.y < h / 2;
-        loupe.style.left = inRight ? 'auto' : '8px';
-        loupe.style.right = inRight ? '8px' : 'auto';
-        loupe.style.top = inBottom ? 'auto' : '8px';
-        loupe.style.bottom = inBottom ? '8px' : 'auto';
-        const span = 36 * Math.max(1, w / 1280);
+        if (!p) { loupePoint = null; loupe.style.display = 'none'; return; }
+        loupePoint = { x: p.x, y: p.y };
+        const fit = containedImageRect(this.host, w, h), size = 144;
+        const lx = p.x < w / 2 ? fit.left + fit.width - size - 8 : fit.left + 8;
+        const ly = p.y < h / 2 ? fit.top + fit.height - size - 8 : fit.top + 8;
+        loupe.style.left = `${Math.max(0, Math.min(this.host.clientWidth - size, lx))}px`;
+        loupe.style.right = 'auto'; loupe.style.top = `${Math.max(0, Math.min(this.host.clientHeight - size, ly))}px`; loupe.style.bottom = 'auto';
+        const span = Math.min(w, h, 36 * Math.max(1, w / 1280));
+        const sx = Math.max(0, Math.min(w - span, p.x - span / 2));
+        const sy = Math.max(0, Math.min(h - span, p.y - span / 2));
+        const crossX = (p.x - sx) * 144 / span, crossY = (p.y - sy) * 144 / span;
         lctx.clearRect(0, 0, 144, 144);
-        try { lctx.drawImage(this.mediaSource, p.x - span / 2, p.y - span / 2, span, span, 0, 0, 144, 144); } catch (_) {}
-        lctx.lineWidth = 1.5;
+        try { lctx.drawImage(this.mediaSource, sx, sy, span, span, 0, 0, 144, 144); } catch (_) {}
         for (const [c, wd] of [['rgba(0,0,0,.8)', 3.5], ['#00ff88', 1.2]]) {
           lctx.strokeStyle = c; lctx.lineWidth = wd; lctx.beginPath();
-          lctx.moveTo(72 - 60, 72); lctx.lineTo(72 - 6, 72); lctx.moveTo(72 + 6, 72); lctx.lineTo(72 + 60, 72);
-          lctx.moveTo(72, 72 - 60); lctx.lineTo(72, 72 - 6); lctx.moveTo(72, 72 + 6); lctx.lineTo(72, 72 + 60); lctx.stroke();
+          const gap = 6, arm = 60, x1 = Math.max(0, crossX - arm), x2 = Math.min(144, crossX + arm), y1 = Math.max(0, crossY - arm), y2 = Math.min(144, crossY + arm);
+          if (crossX - gap > x1) { lctx.moveTo(x1, crossY); lctx.lineTo(crossX - gap, crossY); }
+          if (crossX + gap < x2) { lctx.moveTo(crossX + gap, crossY); lctx.lineTo(x2, crossY); }
+          if (crossY - gap > y1) { lctx.moveTo(crossX, y1); lctx.lineTo(crossX, crossY - gap); }
+          if (crossY + gap < y2) { lctx.moveTo(crossX, crossY + gap); lctx.lineTo(crossX, y2); }
+          lctx.stroke();
         }
         loupe.style.display = 'block';
       };
+      const resizeObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(() => {
+        alignContainedCanvas(cvs, this.host, w, h);
+        if (loupePoint) showLoupe(loupePoint);
+        schedule();
+      }) : null;
+      const onResize = () => {
+        alignContainedCanvas(cvs, this.host, w, h);
+        if (loupePoint) showLoupe(loupePoint);
+        schedule();
+      };
+      resizeObserver?.observe(this.host);
+      window.addEventListener('resize', onResize, { passive: true });
       const drawCross = (p, color, s, bad) => {
         const arm = 15 * s, gap = 3.5 * s;
         for (const [c, wd] of [['rgba(0,0,0,.8)', (bad ? 5 : 4) * s], [color, (bad ? 2.4 : 1.6) * s]]) {
@@ -1324,8 +1395,9 @@ class ManualCalibrationOverlay {
         }
         const s = Math.max(1, cvs.width / 640);
         this.pts.forEach((p, i) => {
-          const bad = fit && n >= 7 && fit.errors[i] > 3, triple = ANCHOR_DEFINITIONS[i] && ANCHOR_DEFINITIONS[i].ring === 'triple';
-          drawCross(p, bad ? '#ff9f1a' : (i === 0 ? '#ff4757' : triple ? '#4dabf7' : '#00ff88'), s, bad);
+          const anchor = ANCHOR_DEFINITIONS[i], bad = fit && n >= 7 && fit.errors[i] > 3;
+          const color = bad ? '#ff9f1a' : (anchor?.isCenter ? '#ff4757' : anchor?.ring === 'singleBull' ? '#ffd166' : anchor?.ring === 'triple' ? '#4dabf7' : '#00ff88');
+          drawCross(p, color, s, bad);
           ctx.fillStyle = '#fff'; ctx.strokeStyle = 'rgba(0,0,0,.8)'; ctx.lineWidth = 3 * s; ctx.font = `700 ${12 * s}px system-ui`;
           ctx.strokeText(String(i + 1), p.x + 10 * s, p.y - 10 * s); ctx.fillText(String(i + 1), p.x + 10 * s, p.y - 10 * s);
         });
@@ -1350,9 +1422,10 @@ class ManualCalibrationOverlay {
       };
       const move = e => { if (drag >= 0) { const c = toCam(e); this.pts[drag] = { x: c.x, y: c.y }; showLoupe(this.pts[drag]); schedule(); } };
       const up = () => { drag = -1; showLoupe(null); redraw(false); };
-      const close = result => { cancelAnimationFrame(raf); cvs.remove(); panel.remove(); loupe.remove(); resolve(result); };
+      const close = result => { cancelAnimationFrame(raf); resizeObserver?.disconnect(); window.removeEventListener('resize', onResize); cvs.remove(); panel.remove(); loupe.remove(); resolve(result); };
 
       cvs.addEventListener('pointerdown', down); cvs.addEventListener('pointermove', move); cvs.addEventListener('pointerup', up);
+      alignContainedCanvas(cvs, this.host, w, h);
       bReset.onclick = () => { this.pts = []; this.note = ''; redraw(false); };
       bCancel.onclick = () => close(null);
       bOk.onclick = () => close(this.pts);
@@ -1376,11 +1449,11 @@ class MotionDetector {
     return g;
   }
 
-  /** Graustufen in Vollauflösung (max. 1920 px breit) für die Spitzenerkennung */
+  /** Graustufen in hoher Auflösung (max. 2560 px breit) für feinere Spitzen-/Schaftdetails */
   grabFull(mediaEl) {
     if (!mediaEl) throw new Error('Kein Kamerabild verfügbar.');
     const srcW = mediaEl.videoWidth || mediaEl.naturalWidth || 1280, srcH = mediaEl.videoHeight || mediaEl.naturalHeight || 720;
-    const sc = Math.min(1, 1920 / srcW), w = Math.round(srcW * sc), h = Math.round(srcH * sc);
+    const sc = Math.min(1, 2560 / srcW), w = Math.round(srcW * sc), h = Math.round(srcH * sc);
     if (!this._fc) { this._fc = document.createElement('canvas'); this._fx = this._fc.getContext('2d', { willReadFrequently: true }); }
     if (!this._fx) throw new Error('Canvas-Kontext für die Spitzenerkennung nicht verfügbar.');
     if (this._fc.width !== w || this._fc.height !== h) { this._fc.width = w; this._fc.height = h; }
@@ -1402,9 +1475,18 @@ class MotionDetector {
     this.roi = roi; this.roiCount = Math.max(1, n);
   }
 
-  diff(a, b) {
-    const m = new Uint8Array(a.length); let n = 0; const th = this.cfg.pixelThreshold;
-    for (let i = 0; i < a.length; i++) if ((!this.roi || this.roi[i]) && Math.abs(a[i] - b[i]) > th) { m[i] = 1; n++; }
+  diff(a, b, { includeMask = true } = {}) {
+    const m = includeMask ? new Uint8Array(a.length) : null, shifts = new Uint32Array(511); let n = 0, samples = 0;
+    for (let i = 0; i < a.length; i++) if (!this.roi || this.roi[i]) { shifts[b[i] - a[i] + 255]++; samples++; }
+    let sum = 0, offset = 0;
+    for (let k = 0; k < shifts.length; k++) { sum += shifts[k]; if (sum >= samples / 2) { offset = k - 255; break; } }
+    const noise = new Uint32Array(256);
+    for (let i = 0; i < a.length; i++) if (!this.roi || this.roi[i]) noise[Math.min(255, Math.abs((b[i] - a[i]) - offset))]++;
+    sum = 0; let noiseMedian = 0;
+    for (let k = 0; k < noise.length; k++) { sum += noise[k]; if (sum >= samples / 2) { noiseMedian = k; break; } }
+    const threshold = Math.min(24, Math.max(this.cfg.pixelThreshold, Math.round(noiseMedian * 1.5 + 3)));
+    for (let i = 0; i < a.length; i++) if ((!this.roi || this.roi[i]) && Math.abs((b[i] - a[i]) - offset) > threshold) { if (m) m[i] = 1; n++; }
+    this.lastDiffMetrics = { offset, noiseMedian, threshold };
     return { mask: m, count: n, ratio: n / (this.roiCount || a.length) };
   }
 
@@ -1423,17 +1505,18 @@ class MotionDetector {
           if (mask[q] && !seen[q]) { seen[q] = 1; stack.push(q); }
         }
       }
-      if (pix.length >= this.cfg.minBlobPixels) out.push(pix);
+      if (pix.length >= Math.max(2, this.cfg.minBlobPixels)) out.push(pix);
     }
     return out.sort((a, b) => b.length - a.length);
   }
   dartLike(blob) {
-    if (!blob || blob.length < 4) return false;
+    if (!blob || blob.length < 3) return false;
     let x0 = this.w, y0 = this.h, x1 = -1, y1 = -1;
     for (const p of blob) { const x = p % this.w, y = (p / this.w) | 0; x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
     const bw = x1 - x0 + 1, bh = y1 - y0 + 1, longSide = Math.max(bw, bh), shortSide = Math.max(1, Math.min(bw, bh));
     // Ein echter Dart erzeugt meist eine längliche Änderung; kleine, kompakte Schatten-/Rauschflecken ignorieren.
-    return longSide >= 5 && longSide / shortSide >= 1.35 && blob.length >= Math.max(4, this.cfg.minBlobPixels);
+    // Sensitivität für dünne, teilweise verdeckte Darts erhöhen; kompakte Pixelcluster bleiben ausgeschlossen.
+    return longSide >= 4 && longSide / shortSide >= 1.2 && blob.length >= Math.max(3, this.cfg.minBlobPixels);
   }
 }
 
@@ -1603,7 +1686,7 @@ class TipLocator {
 
 class ScoreFeedback {
   constructor(ms) {
-    injectCss(); this.ms = ms; this.cur = null; this.timer = null;
+    injectCss(); this.ms = ms; this.cur = null; this.timer = null; this.queue = [];
     this.root = el('div', 'adv-pop'); this.root.hidden = true;
     this.root.innerHTML = `
       <div class="adv-pop-main"><span class="adv-pop-label"></span><span class="adv-pop-pts"></span>
@@ -1623,8 +1706,14 @@ class ScoreFeedback {
   }
 
   show(res, cb, onVerify) {
-    this.commit();
-    this.cur = { res, cb, onVerify }; this.sel = { s: res.segment, m: res.multiplier };
+    const next = { res, cb, onVerify };
+    if (this.cur) { this.queue.push(next); return; }
+    this.present(next);
+  }
+
+  present(next) {
+    this.cur = next; this.sel = { s: next.res.segment, m: next.res.multiplier };
+    const res = next.res;
     this.lbl.textContent = `${res.label} erkannt` + (res.unsure ? ' (unsicher)' : ''); this.pts.textContent = `${res.points} Pkt`;
     this.fix.hidden = true; this.root.hidden = false; this.restartBar();
     clearTimeout(this.timer); this.timer = setTimeout(() => this.commit(), this.ms);
@@ -1679,9 +1768,10 @@ class ScoreFeedback {
     clearTimeout(this.timer);
     const c = this.cur; this.cur = null; this.root.hidden = true;
     if (c) { if (verdict !== null && c.onVerify) c.onVerify(verdict); c.cb(c.res); }
+    if (this.queue.length) this.present(this.queue.shift());
   }
 
-  destroy() { clearTimeout(this.timer); this.root.remove(); }
+  destroy() { clearTimeout(this.timer); this.queue = []; this.root.remove(); }
 }
 
 class AutoDartsEngine {
@@ -1692,6 +1782,7 @@ class AutoDartsEngine {
     this.H = null; this.Hinv = null; this.camSize = null;
     this.state = 'idle'; this.still = 0; this.prev = null; this.reference = null; this.timer = null;
     this.isVideoFileMode = false; this.isScreenshotMode = false; this.activeMedia = null; this.lsKey = LS_KEY;
+    this.overlayResizeObserver = null;
     this.turnDarts = []; this.turnComplete = false; this.emptyRef = null; this.refFull = null; this.dartSeq = 0; this.shotPoint = null;
     this.motion = new MotionDetector(this.cfg.motion);
     this.tip = new TipLocator(this.cfg.tip);
@@ -1708,6 +1799,10 @@ class AutoDartsEngine {
   async start() {
     injectCss();
     const host = this.cfg.container; host.classList.add('adv-wrap');
+    if (typeof ResizeObserver === 'function') {
+      this.overlayResizeObserver = new ResizeObserver(() => this.layoutOverlays());
+      this.overlayResizeObserver.observe(host);
+    } else window.addEventListener('resize', () => this.layoutOverlays(), { passive: true });
     this.video = this.cfg.video || el('video'); this.video.playsInline = true; this.video.muted = true;
     if (!this.cfg.video) host.prepend(this.video);
     if (!this.cfg.showVideo) { this.video.style.cssText = 'position:absolute;width:1px;height:1px;opacity:0'; }
@@ -1770,7 +1865,7 @@ class AutoDartsEngine {
     this.H = this.Hinv = null; this.motion.roi = null; this.showGrid(false);
     this.loadHomography();
     if (!this._shotClick) { this._shotClick = e => this.onShotClick(e); this.cfg.container.addEventListener('pointerdown', this._shotClick); }
-    this.setStatus(this.H ? 'Screenshot geladen – Kalibrierung gefunden, tippe aufs Bild für den Score' : 'Screenshot geladen – Auto-Erkennung oder 15 Punkte setzen');
+    this.setStatus(this.H ? 'Screenshot geladen – Kalibrierung gefunden, tippe aufs Bild für den Score' : 'Screenshot geladen – Auto-Erkennung oder 19 Punkte setzen');
     this.emit('media-ready', { calibrated: !!this.H, screenshot: true });
   }
 
@@ -1787,8 +1882,11 @@ class AutoDartsEngine {
   onShotClick(e) {
     if (!this.isScreenshotMode || this._calibrating || !this.H || !this.shotImg) return;
     if (e.target.closest && e.target.closest('.adv-panel')) return;
-    const r = this.shotImg.getBoundingClientRect();
-    const x = (e.clientX - r.left) * this.camSize.w / r.width, y = (e.clientY - r.top) * this.camSize.h / r.height;
+    const hostRect = this.cfg.container.getBoundingClientRect();
+    const view = containedImageRect(this.cfg.container, this.camSize.w, this.camSize.h);
+    if (!view.width || !view.height) return;
+    const x = (e.clientX - hostRect.left - view.left) * this.camSize.w / view.width;
+    const y = (e.clientY - hostRect.top - view.top) * this.camSize.h / view.height;
     if (x < 0 || y < 0 || x > this.camSize.w || y > this.camSize.h) return;
     const b = Homography.apply(this.H, x, y), res = Scoring.fromBoard(b.x, b.y, this.cfg.radii);
     this.shotPoint = { x, y, label: res.label }; this.drawMarks();
@@ -1885,7 +1983,13 @@ class AutoDartsEngine {
     c.width = this.camSize.w; c.height = this.camSize.h;
     drawBoardOverlay(c.getContext('2d'), this.Hinv, this.cfg.radii);
     this.cfg.container.append(c);
+    alignContainedCanvas(c, this.cfg.container, this.camSize.w, this.camSize.h);
     if (this.markCvs) this.cfg.container.append(this.markCvs);               // Markierungen bleiben über dem Raster
+  }
+
+  layoutOverlays() {
+    if (!this.camSize) return;
+    for (const c of [this.gridCvs, this.markCvs]) if (c?.isConnected) alignContainedCanvas(c, this.cfg.container, this.camSize.w, this.camSize.h);
   }
 
   /* ---------------------------------------------------------------- Markierungen (Spitze rot, Flight blau) */
@@ -1893,6 +1997,7 @@ class AutoDartsEngine {
   ensureMarks() {
     if (!this.markCvs || !this.markCvs.isConnected) { this.markCvs = el('canvas', 'adv-cal-canvas'); this.markCvs.style.pointerEvents = 'none'; this.cfg.container.append(this.markCvs); }
     if (this.camSize && (this.markCvs.width !== this.camSize.w || this.markCvs.height !== this.camSize.h)) { this.markCvs.width = this.camSize.w; this.markCvs.height = this.camSize.h; }
+    if (this.camSize) alignContainedCanvas(this.markCvs, this.cfg.container, this.camSize.w, this.camSize.h);
     return this.markCvs;
   }
 
@@ -1930,7 +2035,8 @@ class AutoDartsEngine {
     this.clearMarks(); this.emitTurn();
   }
 
-  emitTurn() { this.emit('turn-update', { count: this.turnDarts.length, max: this.cfg.turn.darts, complete: this.turnComplete }); }
+  get turnLimit() { const n = Number(this.cfg.turn?.darts); return Math.min(3, Math.max(1, Number.isFinite(n) ? Math.floor(n) : 3)); }
+  emitTurn() { this.emit('turn-update', { count: this.turnDarts.length, max: this.turnLimit, complete: this.turnComplete }); }
 
   beginDetection() {
     if (!this.camSize) return;
@@ -1948,6 +2054,18 @@ class AutoDartsEngine {
 
   stopDetection() { clearInterval(this.timer); this.timer = null; this.state = 'idle'; }
 
+  async captureTrainingFrame() {
+    const media = this.video, srcW = media?.videoWidth, srcH = media?.videoHeight;
+    if (!srcW || !srcH) return null;
+    const scale = Math.min(1, 640 / Math.max(srcW, srcH));
+    const canvas = document.createElement('canvas'); canvas.width = Math.max(1, Math.round(srcW * scale)); canvas.height = Math.max(1, Math.round(srcH * scale));
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    try { ctx.drawImage(media, 0, 0, canvas.width, canvas.height); }
+    catch (_) { return null; }
+    return new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.72));
+  }
+
   /** Neue Aufnahme: aktuelles Bild gilt als leeres Board (z. B. nach dem Darts ziehen) */
   newTurn() {
     if (!this.H || this.isScreenshotMode) return;
@@ -1960,16 +2078,39 @@ class AutoDartsEngine {
     this.setStatus('Neue Aufnahme – Bereit');
   }
 
+  drawDiffPreview(mask) {
+    const canvas = document.getElementById('diff-preview');
+    if (!canvas || !this.motion.w || !this.motion.h) return;
+    const w = this.motion.w, h = this.motion.h;
+    if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+    const ctx = canvas.getContext('2d'); if (!ctx) return;
+    const image = ctx.createImageData(w, h), px = image.data;
+    for (let i = 0, j = 0; i < w * h; i++, j += 4) {
+      const changed = !!mask?.[i];
+      px[j] = changed ? 0 : 12; px[j + 1] = changed ? 255 : 16; px[j + 2] = changed ? 136 : 22; px[j + 3] = 255;
+    }
+    ctx.putImageData(image, 0, 0);
+  }
+
   tick() {
     const mediaSource = this.video;
     if (!mediaSource || mediaSource.readyState < 2 || (!this.motion.roi && !this.prepareRoi())) return;
     const g = this.motion.grab(mediaSource), m = this.cfg.motion;
-    const ratio = this.prev ? this.motion.diff(g, this.prev).ratio : 0;
-    const refRatio = this.reference ? this.motion.diff(g, this.reference).ratio : 0;
-    if ((this.debugTick = (this.debugTick || 0) + 1) % 3 === 0) {
+    const debugPanel = document.getElementById('detection-debug');
+    const debugNow = !!debugPanel && !debugPanel.hidden && ((this.debugTick = (this.debugTick || 0) + 1) % 3 === 0);
+    const frameDiff = this.prev ? this.motion.diff(g, this.prev, { includeMask: false }) : null;
+    const ratio = frameDiff?.ratio || 0;
+    const refRatio = this.reference ? this.motion.diff(g, this.reference, { includeMask: false }).ratio : 0;
+    const boardRef = this.emptyRef || this.reference;
+    const boardDiff = debugNow && boardRef ? this.motion.diff(g, boardRef, { includeMask: true }) : null;
+    if (debugNow) {
       const stateEl = document.getElementById('debug-state'), diffEl = document.getElementById('debug-diff');
       if (stateEl) stateEl.textContent = `Status: ${this.state === 'armed' ? 'bereit' : this.state === 'moving' ? 'Bewegung / Schatten prüfen' : this.state === 'busy' ? 'Bild wird geprüft' : this.state}`;
-      if (diffEl) diffEl.textContent = `Änderung: ${(ratio * 100).toFixed(2)} % · Board: ${(refRatio * 100).toFixed(2)} %`;
+      const lm = this.motion.lastDiffMetrics || {};
+      if (diffEl) diffEl.textContent = `Frame ${((ratio || 0) * 100).toFixed(2)} % · Board ${(boardDiff?.ratio * 100 || 0).toFixed(2)} % · Licht ${lm.offset ?? 0} · Rauschen ${lm.noiseMedian ?? 0} · Schwelle ${lm.threshold ?? m.pixelThreshold}`;
+      this.drawDiffPreview(boardDiff?.mask || null);
+      const fill = document.getElementById('diff-meter-fill');
+      if (fill) fill.style.width = `${Math.min(100, ((boardDiff?.ratio || 0) / 0.2) * 100)}%`;
     }
     this.prev = g;
     switch (this.state) {
@@ -1977,7 +2118,7 @@ class AutoDartsEngine {
         this.still = ratio < m.stillRatio ? this.still + 1 : 0;
         if (this.still >= m.stillFrames) {
           this.reference = g; this.emptyRef = g; this.refFull = this.motion.grabFull(mediaSource);
-          this.state = 'armed'; this.setStatus('Bereit – 3 Darts werfen'); this.emitTurn();
+          this.state = 'armed'; this.setStatus(`Bereit – maximal ${this.turnLimit} Darts`); this.emitTurn();
         }
         break;
       case 'armed': {
@@ -1987,7 +2128,7 @@ class AutoDartsEngine {
       }
       case 'moving':
         this.still = ratio < m.stillRatio ? this.still + 1 : 0;
-        if (this.still >= m.stillFrames) this.settled(g);
+        if (this.still >= m.stillFrames) this.settled(g).catch(err => { console.error('[Erkennung] Auswertung fehlgeschlagen:', err); this.state = 'armed'; this.still = 0; this.setStatus('Erkennungsfehler – erneut bereit'); });
         break;
     }
   }
@@ -2041,33 +2182,38 @@ class AutoDartsEngine {
 
   async settled(g) {
     this.state = 'busy';
-    const m = this.cfg.motion, tn = this.cfg.turn;
-    let cur = this.motion.grabFull(this.video);
-    // Mehrere stabile Bilder mitteln: kurze Schatten-/Belichtungsflackern sollen keinen Dart vortäuschen.
+    const m = this.cfg.motion, tn = { ...this.cfg.turn, darts: this.turnLimit };
+    // Mehrere kleine Bilder mitteln: Schattenfilter bleibt erhalten, ohne drei teure Vollbilder zu konvertieren.
     await new Promise(resolve => setTimeout(resolve, 80));
-    const g1 = this.motion.grab(this.video), cur1 = this.motion.grabFull(this.video);
+    const g1 = this.motion.grab(this.video);
     await new Promise(resolve => setTimeout(resolve, 80));
-    const g2 = this.motion.grab(this.video), cur2 = this.motion.grabFull(this.video);
+    const g2 = this.motion.grab(this.video);
     const median3 = (a, b, c) => {
       const out = new Uint8Array(a.length);
       for (let i = 0; i < a.length; i++) out[i] = Math.max(Math.min(a[i], b[i]), Math.min(Math.max(a[i], b[i]), c[i]));
       return out;
     };
     g = median3(g, g1, g2);
-    if (cur.w === cur1.w && cur.w === cur2.w && cur.h === cur1.h && cur.h === cur2.h) {
-      cur = { g: median3(cur.g, cur1.g, cur2.g), w: cur.w, h: cur.h };
-    }
     const d = this.motion.diff(g, this.reference);
 
     if (d.ratio > m.maxChangeRatio) {                                          // Hand im Bild: abwarten, Referenz nicht anfassen
       this.state = 'armed'; this.setStatus(this.turnComplete ? 'Darts werden gezogen …' : 'Hand im Bild …'); return;
     }
+    // Die teure, bis zu 2560 px breite Aufnahme erst nach dem groben Hand-/Bewegungsfilter erzeugen.
+    const cur = this.motion.grabFull(this.video);
     if (this.turnDarts.length && this.emptyRef) {                              // Board wieder leer = Darts gezogen = Aufnahme beendet
       const e = this.motion.diff(g, this.emptyRef);
       if (e.ratio < tn.emptyRatio) { this.endTurn(g, cur, 'removed'); return; }
     }
     const blobs = this.motion.blobs(d.mask).filter(blob => this.motion.dartLike(blob));
-    if (!blobs.length) { this.reference = g; this.refFull = cur; this.state = 'armed'; this.setStatus(this.turnComplete ? 'Aufnahme beendet – bitte Darts ziehen' : 'Bereit'); return; }
+    if (!blobs.length) {
+      // Wichtig: Bei erfolgloser Blob-Erkennung die Referenz NICHT auf das aktuelle Bild setzen.
+      // Sonst wird eine noch nicht erkannte Dart-Änderung in der Referenz "absorbiert"
+      // und verschwindet beim nächsten Versuch aus der Differenz zur Referenz.
+      this.state = 'armed';
+      this.setStatus(this.turnComplete ? 'Aufnahme beendet – bitte Darts ziehen' : 'Bereit – Änderung wird weiter geprüft');
+      return;
+    }
 
     if (this.turnDarts.length && this.isRemoval(blobs[0], g)) {                // einzelner Dart herausgezogen
       const mo = this.motion, sx = this.camSize.w / mo.w, sy = this.camSize.h / mo.h; let cx = 0, cy = 0;
@@ -2086,14 +2232,24 @@ class AutoDartsEngine {
     const b = Homography.apply(this.H, loc.tip.x, loc.tip.y);
     const res = Scoring.fromBoard(b.x, b.y, this.cfg.radii);
 
-    this.reference = this.prev || g; this.refFull = cur; this.state = 'armed';
-    if (!isFinite(res.board.r) || res.board.r > m.maxScoreRadius) { this.setStatus('Bereit'); this.emit('detect-failed', { tip: loc.tip }); return; }
+    if (!isFinite(res.board.r) || res.board.r > m.maxScoreRadius) {
+      // Außerhalb des gültigen Boards: Referenz behalten, damit die Änderung erneut
+      // ausgewertet werden kann, statt sie stillschweigend als neuen Ausgangszustand zu übernehmen.
+      this.state = 'armed';
+      this.setStatus('Treffer außerhalb des Boards – Änderung bleibt zur Prüfung');
+      this.emit('detect-failed', { tip: loc.tip });
+      return;
+    }
 
+    // Referenz erst nach erfolgreicher Trefferbestimmung aktualisieren.
+    this.reference = this.prev || g; this.refFull = cur; this.state = 'armed';
     const dart = { id: ++this.dartSeq, tip: loc.tip, flight: loc.flight, label: res.label, unsure: loc.unsure };
-    Object.assign(res, { cam: { x: loc.tip.x, y: loc.tip.y }, flight: loc.flight, confidence: loc.conf, source: loc.source, unsure: loc.unsure, dartId: dart.id, D: loc.D, ext: loc.ext });
+    Object.assign(res, { cam: { x: loc.tip.x, y: loc.tip.y }, flight: loc.flight, confidence: loc.conf, source: loc.source, unsure: loc.unsure, dartId: dart.id, D: loc.D, ext: loc.ext, illumination: { ...this.motion.lastDiffMetrics } });
+    // Der Treffer wird sofort angezeigt; JPEG-Erzeugung für den Trainings-Export läuft parallel.
+    res.trainingImagePromise = this.captureTrainingFrame().catch(() => null);
     this.turnDarts.push(dart); this.drawMarks();
     const n = this.turnDarts.length;
-    if (n >= tn.darts) { this.turnComplete = true; this.setStatus(`${res.label}${loc.unsure ? ' (unsicher)' : ''} – Aufnahme beendet, bitte Darts ziehen`); this.emit('turn-complete', { darts: this.turnDarts.slice() }); }
+    if (n >= tn.darts) { this.turnComplete = true; this.setStatus(`${res.label}${loc.unsure ? ' (unsicher)' : ''} – ${tn.darts}/${tn.darts} erkannt, Runde automatisch beendet`); this.emit('turn-complete', { darts: this.turnDarts.slice() }); }
     else this.setStatus(`${res.label}${loc.unsure ? ' (unsicher)' : ''} – Dart ${n}/${tn.darts}`);
     if (loc.frontal) console.log('[Erkennung] Kamera schaut fast senkrecht aufs Board (Blickwinkel unter 20°) – die Spitze ist verdeckt und unsicher. Kamera seitlich/unten stellen (ab ca. 25–30°) verbessert die Genauigkeit.');
     this.emitTurn();
@@ -2233,6 +2389,57 @@ document.addEventListener('DOMContentLoaded', async () => {
         $('accuracy-counts').textContent = judged ? `Richtig ${accuracy.correct} · Falsch ${accuracy.incorrect} · bewertet ${judged}` : 'Noch keine Würfe bewertet';
     };
     paintAccuracy();
+    const openTrainingDb = () => new Promise((resolve, reject) => {
+        if (!('indexedDB' in window)) return reject(new Error('IndexedDB wird von diesem Browser nicht unterstützt.'));
+        const req = indexedDB.open('dartly_training_samples', 1);
+        req.onupgradeneeded = () => { if (!req.result.objectStoreNames.contains('examples')) req.result.createObjectStore('examples', { keyPath: 'id' }); };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error || new Error('Lokaler Trainingsspeicher konnte nicht geöffnet werden.'));
+    });
+    const trainingDb = openTrainingDb();
+    const updateTrainingCount = async () => {
+        try {
+            const db = await trainingDb, tx = db.transaction('examples', 'readonly'), req = tx.objectStore('examples').count();
+            req.onsuccess = () => { $('training-count').textContent = `${req.result} Trainingsbeispiele · lokal gespeichert`; };
+        } catch (e) { $('training-count').textContent = 'Lokaler Trainingsspeicher nicht verfügbar'; }
+    };
+    const saveTrainingExample = async ({ verdict, res }) => {
+        const db = await trainingDb;
+        let trainingImage = res.trainingImage || null;
+        if (!trainingImage && res.trainingImagePromise) trainingImage = await res.trainingImagePromise;
+        const example = {
+            id: crypto.randomUUID(), judgedAt: new Date().toISOString(), verdict: verdict ? 'richtig' : 'falsch',
+            prediction: { label: res.corrected ? (res.original || null) : res.label, points: res.corrected ? null : res.points, confidence: res.confidence, source: res.source, unsure: !!res.unsure },
+            groundTruth: verdict ? { label: res.label, points: res.points, segment: res.segment, multiplier: res.multiplier } : (res.corrected ? { label: res.label, points: res.points, segment: res.segment, multiplier: res.multiplier } : null),
+            errorType: verdict ? null : (res.corrected ? 'score_mismatch_corrected' : 'false_or_unlabeled_detection'),
+            geometry: { board: res.board, camera: res.cam, flight: res.flight, dartAngle: res.D, extension: res.ext },
+            lighting: res.illumination || null, image: trainingImage,
+        };
+        await new Promise((resolve, reject) => {
+            const tx = db.transaction('examples', 'readwrite');
+            tx.objectStore('examples').put(example);
+            tx.oncomplete = resolve; tx.onerror = () => reject(tx.error || new Error('Trainingsbeispiel konnte nicht gespeichert werden.'));
+        });
+        await updateTrainingCount();
+    };
+    const blobToDataUrl = blob => new Promise((resolve, reject) => {
+        if (!blob) return resolve(null);
+        const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = () => reject(reader.error); reader.readAsDataURL(blob);
+    });
+    const exportTrainingData = async () => {
+        const db = await trainingDb;
+        const records = await new Promise((resolve, reject) => {
+            const req = db.transaction('examples', 'readonly').objectStore('examples').getAll();
+            req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
+        });
+        const evaluations = await Promise.all(records.map(async ({ image, ...record }) => ({ ...record, imageDataUrl: await blobToDataUrl(image) })));
+        const payload = { format: 'dartly-local-training-v1', exportedAt: new Date().toISOString(), count: evaluations.length, evaluations };
+        const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }));
+        const a = document.createElement('a'); a.href = url; a.download = `dartly-training-${new Date().toISOString().slice(0, 10)}.json`; a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 30000);
+        statusEl.textContent = `${evaluations.length} Trainingsbeispiele exportiert`;
+    };
+    updateTrainingCount();
 
     const engine = new AutoDartsEngine({
         container: document.querySelector('.camera-wrapper'),
@@ -2246,11 +2453,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
     window.dartEngine = engine;
     await engine.start();
-    engine.on('verification', ({ verdict }) => {
+    engine.on('verification', event => {
+        const { verdict } = event;
         accuracy[verdict ? 'correct' : 'incorrect']++;
         localStorage.setItem(ACC_KEY, JSON.stringify(accuracy));
         paintAccuracy();
+        saveTrainingExample(event).catch(e => { console.warn('[Training] Beispiel konnte lokal nicht gespeichert werden:', e); statusEl.textContent = 'Bewertung gezählt; Trainingsbild konnte nicht lokal gespeichert werden'; });
     });
+    $('training-export').addEventListener('click', () => exportTrainingData().catch(e => { console.error('[Training] Export fehlgeschlagen:', e); statusEl.textContent = `Export fehlgeschlagen: ${e.message}`; }));
     $('accuracy-reset').addEventListener('click', () => {
         accuracy = { correct: 0, incorrect: 0 };
         localStorage.setItem(ACC_KEY, JSON.stringify(accuracy));
@@ -2366,10 +2576,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     // ---------- Aufnahme-Anzeige + Markierungen ----------
     const renderPips = (n, max, complete) => {
         $('turn-pips').innerHTML = Array.from({ length: max }, (_, i) => `<span class="dart-pip${i < n ? ' on' : ''}"></span>`).join('');
-        $('turn-text').textContent = complete ? 'Aufnahme beendet – bitte Darts ziehen' : (n ? `${n} von ${max} Darts erkannt` : 'Bereit – Darts werfen');
+        $('turn-text').textContent = complete ? `${max}/${max} Darts erkannt – Runde automatisch beendet` : (n ? `${n} von ${max} Darts erkannt` : `Bereit – bis zu ${max} Darts werfen`);
     };
-    renderPips(0, engine.cfg.turn.darts, false);
+    renderPips(0, engine.turnLimit, false);
     engine.on('turn-update', s => renderPips(s.count, s.max, s.complete));
+    engine.on('turn-complete', () => {
+        if (!engine.isVideoFileMode) return; // Livebild bleibt aktiv, damit Dart-Entnahme die nächste Runde automatisch startet.
+        vidEl.pause();
+        playBtn.innerHTML = ICON.play + 'Weiter';
+        engine.setStatus(`${engine.turnLimit}/${engine.turnLimit} Darts – Videoanalyse automatisch pausiert`);
+    });
+    vidEl.addEventListener('play', () => { if (engine.isVideoFileMode) playBtn.innerHTML = ICON.pause + 'Pause'; });
+    vidEl.addEventListener('pause', () => { if (engine.isVideoFileMode) playBtn.innerHTML = ICON.play + 'Weiter'; });
     engine.on('turn-reset', ({ darts }) => {
         if (darts.length) { const sep = document.createElement('div'); sep.className = 'throw-sep'; sep.textContent = `Aufnahme beendet · ${turnSum} Punkte`; list.prepend(sep); }
         turnSum = 0;

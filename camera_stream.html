@@ -95,6 +95,7 @@ const store = { get: k => { try { return localStorage.getItem(k); } catch (_) { 
 const S = { facing: 'environment', w: 1280, h: 1280, stream: null, track: null, peerConnection: null, wake: null, running: false };
 let lastBytes = 0, lastAt = 0, statTimer = null, html5QrCode = null;
 let signalingDocRef = null, unsubscribeSnapshot = null;
+let qrHandling = false;
 let cameraProcessedCandidates = new Set();
 let camIceQueue = [];
 let camIceBuffer = [];
@@ -277,12 +278,19 @@ async function startScanner() {
     await html5QrCode.start(
       { facingMode: "environment" },
       { fps: 10, qrbox: { width: 250, height: 250 } },
-      (decodedText) => {
+      async (decodedText) => {
+        if (qrHandling) return;
         const cleanCode = decodedText.replace(/\D/g, '').slice(0, 6);
         if (cleanCode.length === 6) {
+          qrHandling = true;
           $('code').value = cleanCode;
-          stopScanner();
-          start();
+          try {
+            // Scanner-Kameraspur erst freigeben, bevor die Stream-Kamera geöffnet wird.
+            await stopScanner();
+            await start();
+          } finally {
+            qrHandling = false;
+          }
         }
       },
       () => {}
