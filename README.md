@@ -49,4 +49,4 @@
 * **Beleuchtung:** Ein schattenfreier LED-Lichtring (Surround-Light) verbessert die Auto-Kalibrierung und verhindert falsche Schatten-Blobs beim Werfen.
 * **Stabilität:** Das Smartphone darf nach der Kalibrierung nicht mehr bewegt werden. Aktiviere am Handy den Modus *„Bildschirm abdunkeln“* und lasse den Browser im Vordergrund geöffnet.
 * **2-Kamera-Setup:** Positioniere zwei Kameras in einem Winkel von ca. $60^\circ$ bis $90^\circ$ zueinander (z. B. oben links und oben rechts), um verdeckte Darts zuverlässig aufzulösen.
-* 
+  
