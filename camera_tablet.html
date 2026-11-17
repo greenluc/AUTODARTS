@@ -1495,7 +1495,7 @@ class DartLocator {
     if (opts.normalDir) {
       const nd = opts.normalDir, pr = new Float64Array(n); let pmin = Infinity, pmax = -Infinity;
       for (let i = 0; i < n; i++) { pr[i] = xs[i] * nd.x + ys[i] * nd.y; if (pr[i] < pmin) pmin = pr[i]; if (pr[i] > pmax) pmax = pr[i]; }
-      const ext = pmax - pmin, band = Math.max(1.5, 0.06 * ext);
+      const ext = pmax - pmin, band = 1.5;
       let tx = 0, ty = 0, tn = 0, fx = 0, fy = 0, fn = 0, ex = 0, ey = 0, en = 0;
       for (let i = 0; i < n; i++) {
         if (pr[i] <= pmin + band) { tx += xs[i]; ty += ys[i]; tn++; }
