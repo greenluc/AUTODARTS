@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Dartly Arena - Kamera Empfänger & Video-Analyse</title>
     <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <!-- QR Code Generator Bibliothek -->
@@ -190,7 +190,7 @@
             color: var(--text-gray);
         }
 
-        .dual-pair-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin-bottom:16px; }
+        .dual-pair-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:12px; margin-bottom:16px; }
         .dual-pair-grid.single-cam { grid-template-columns:1fr; }
         .pair-card { min-width:0; background:rgba(0,255,136,.035); border:1px dashed rgba(0,255,136,.42); border-radius:14px; padding:12px; display:grid; grid-template-columns:1fr auto; align-items:center; gap:8px 12px; }
         .pair-card.right { border-color:rgba(77,171,247,.55); background:rgba(77,171,247,.045); }
@@ -199,7 +199,9 @@
         .pair-card.right .pair-code { color:#4dabf7; }
         .pair-qr { grid-column:2; grid-row:1 / span 2; background:#fff; padding:5px; border-radius:8px; min-width:70px; min-height:70px; }
         .pair-qr canvas,.pair-qr img { display:block; width:70px!important; height:70px!important; }
-        .dual-camera-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; align-items:start; }
+        .camera-source-controls { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+        .camera-source-controls select { flex:1 1 180px; min-width:0; background:#171b2b; color:#fff; border:1px solid var(--glass-border); border-radius:8px; padding:9px; }
+        .dual-camera-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:14px; align-items:start; }
         .dual-camera-grid.single-cam { grid-template-columns:1fr; }
         .camera-view { min-width:0; }
         .camera-view-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px; color:var(--text-gray); font-weight:700; }
@@ -433,6 +435,18 @@
         .level-row input[type=range] { width:100%; accent-color: var(--accent); }
         .level-scale { display:flex; justify-content:space-between; color:var(--text-gray); font-size:.75rem; }
         .level-hint { color:var(--text-gray); font-size:.82rem; margin-top:6px; }
+
+        .ref-diff { display:block; width:100%; aspect-ratio:16/9; background:#000; border-radius:10px; margin:8px 0 4px; image-rendering:pixelated; }
+        [id^="btn-auto-"] { background:rgba(0,255,136,.2); border-color:rgba(0,255,136,.6); color:#fff; }
+        @media (max-width:700px) {
+            body { padding:10px 10px calc(env(safe-area-inset-bottom,0px) + 28px); }
+            header h1 { font-size:1.35rem; }
+            .hub-card { padding:14px; }
+            .btn-action, .ref-btn-mini, .cam-toggle-label { min-height:48px; touch-action:manipulation; }
+            .btn-group { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+            .camera-source-controls select { min-height:48px; font-size:16px; }
+            .status-panel { position:sticky; bottom:0; z-index:5; backdrop-filter:blur(10px); }
+        }
         [hidden] { display:none !important; }
         .throw-sep { padding:6px 4px; color:var(--accent); font-weight:700; font-size:.85rem; border-bottom:1px dashed var(--glass-border); }
     </style>
@@ -457,15 +471,19 @@
             <div class="cam-mode-bar">
                 <label class="cam-toggle-label" for="toggle-second-cam">
                     <input type="checkbox" id="toggle-second-cam">
-                    <span>2. Kamera (Rechts) optional zuschalten</span>
+                    <span>Kamera 2 zuschalten</span>
                 </label>
+                <label class="cam-toggle-label" for="toggle-third-cam"><input type="checkbox" id="toggle-third-cam"><span>Kamera 3 zuschalten</span></label>
                 <span class="cam-mode-hint" id="cam-mode-hint">1-Kamera-Modus aktiv</span>
             </div>
 
+            <details class="advanced-options" open><summary>Kamera-Verbindung &amp; QR-Codes</summary>
             <div class="dual-pair-grid single-cam" id="dual-pair-grid">
                 <div class="pair-card"><div><div class="pair-label" id="pair-label-left">KAMERA · PAIRING-CODE</div><div class="pair-code" id="pairing-code-left">------</div><div class="cam-state" id="pair-status-left">Warte auf Handy</div></div><div class="pair-qr" id="qrcode-left"></div><button class="btn-action" id="btn-new-code-left" type="button">Neuer Code</button></div>
-                <div class="pair-card right" id="pair-card-right" hidden><div><div class="pair-label">KAMERA RECHTS · PAIRING-CODE</div><div class="pair-code" id="pairing-code-right">------</div><div class="cam-state" id="pair-status-right">Warte auf rechtes Handy</div></div><div class="pair-qr" id="qrcode-right"></div><button class="btn-action" id="btn-new-code-right" type="button">Neuer Code rechts</button></div>
+                <div class="pair-card right" id="pair-card-right" hidden><div><div class="pair-label">KAMERA 2 · PAIRING-CODE</div><div class="pair-code" id="pairing-code-right">------</div><div class="cam-state" id="pair-status-right">Warte auf rechtes Handy</div></div><div class="pair-qr" id="qrcode-right"></div><button class="btn-action" id="btn-new-code-right" type="button">Neuer Code rechts</button></div>
+                <div class="pair-card" id="pair-card-third" hidden><div><div class="pair-label">KAMERA 3 · PAIRING-CODE</div><div class="pair-code" id="pairing-code-third">------</div><div class="cam-state" id="pair-status-third">Warte auf drittes Gerät</div></div><div class="pair-qr" id="qrcode-third"></div><button class="btn-action" id="btn-new-code-third" type="button">Neuer Code 3</button></div>
             </div>
+            </details>
 
             <h3>
                 <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
@@ -473,15 +491,23 @@
             </h3>
 
             <div class="dual-camera-grid single-cam" id="dual-camera-grid">
-              <section class="camera-view left" aria-label="Hauptkamera">
-                <div class="camera-view-head"><span id="camera-title-left">Boardkamera</span><span class="cam-state" id="camera-status-left">Nicht verbunden</span></div>
+              <section class="camera-view left" aria-label="Kamera 1">
+                <div class="camera-view-head"><span id="camera-title-left">Kamera 1</span><span class="cam-state" id="camera-status-left">Nicht verbunden</span></div>
                 <div class="camera-wrapper" id="camera-wrapper-left"><video id="webcam" autoplay playsinline muted></video></div>
+                <details class="advanced-options"><summary>Kameraquelle &amp; Geräte</summary><div class="camera-source-controls"><select id="camera-source-left" aria-label="Kameraquelle 1"><option value="remote">Handy / WebRTC</option></select><button class="btn-action" id="camera-refresh-left" type="button">Geräte suchen</button></div></details>
                 <div class="btn-group"><button class="btn-action" id="btn-auto-left" type="button">Auto kalibrieren</button><button class="btn-action" id="btn-manual-left" type="button">19 Punkte</button></div>
               </section>
-              <section class="camera-view right" id="camera-view-right" aria-label="Rechte Boardkamera" hidden>
-                <div class="camera-view-head"><span>Ansicht rechts</span><span class="cam-state" id="camera-status-right">Nicht verbunden</span></div>
+              <section class="camera-view right" id="camera-view-right" aria-label="Kamera 2" hidden>
+                <div class="camera-view-head"><span>Kamera 2</span><span class="cam-state" id="camera-status-right">Nicht verbunden</span></div>
                 <div class="camera-wrapper" id="camera-wrapper-right"><video id="webcam-right" autoplay playsinline muted></video></div>
+                <details class="advanced-options"><summary>Kameraquelle &amp; Geräte</summary><div class="camera-source-controls"><select id="camera-source-right" aria-label="Kameraquelle 2"><option value="remote">Handy / WebRTC</option></select><button class="btn-action" id="camera-refresh-right" type="button">Geräte suchen</button></div></details>
                 <div class="btn-group"><button class="btn-action" id="btn-auto-right" type="button">Auto kalibrieren</button><button class="btn-action" id="btn-manual-right" type="button">19 Punkte</button></div>
+              </section>
+              <section class="camera-view" id="camera-view-third" aria-label="Kamera 3" hidden>
+                <div class="camera-view-head"><span>Kamera 3</span><span class="cam-state" id="camera-status-third">Nicht verbunden</span></div>
+                <div class="camera-wrapper" id="camera-wrapper-third"><video id="webcam-third" autoplay playsinline muted></video></div>
+                <details class="advanced-options"><summary>Kameraquelle &amp; Geräte</summary><div class="camera-source-controls"><select id="camera-source-third" aria-label="Kameraquelle 3"><option value="remote">Handy / WebRTC</option></select><button class="btn-action" id="camera-refresh-third" type="button">Geräte suchen</button></div></details>
+                <div class="btn-group"><button class="btn-action" id="btn-auto-third" type="button">Auto kalibrieren</button><button class="btn-action" id="btn-manual-third" type="button">19 Punkte</button></div>
               </section>
             </div>
             <div class="fusion-status" id="fusion-status" aria-live="polite" hidden>Multi-View bereit · ein Treffer wird aus beiden Ansichten abgeglichen.</div>
@@ -492,23 +518,28 @@
                     <span id="ref-sync-badge">Automatische Entnahme-Erkennung aktiv</span>
                 </div>
                 <div class="ref-grid single-cam" id="ref-grid">
-                    <div class="ref-box left">
-                        <div class="ref-box-top">
-                            <span class="ref-cam-name" id="ref-cam-name-left">HAUPTKAMERA</span>
-                            <button class="ref-btn-mini" id="btn-ref-reset-left" type="button" title="Aktuelles Bild als leeres Board speichern">Als leer setzen</button>
-                        </div>
+                    <div class="ref-box" id="ref-box-left">
+                        <div class="ref-box-top"><span class="ref-cam-name" id="ref-cam-name-left">KAMERA 1</span><button class="ref-btn-mini" id="btn-ref-reset-left" type="button" title="Aktuelles Bild als leeres Board speichern">Als leer setzen</button></div>
+                        <canvas class="ref-diff" id="ref-diff-left" width="320" height="180" aria-label="Differenzbild Kamera 1"></canvas>
                         <div class="ref-status-text" id="ref-text-left">Kein Referenzbild aktiv</div>
-                        <div class="ref-meta-text" id="ref-meta-left">Warte auf Kamerabild & Kalibrierung</div>
+                        <div class="ref-meta-text" id="ref-meta-left">Warte auf Kamerabild &amp; Kalibrierung</div>
+                        <div class="ref-meta-text" id="ref-diff-info-left">Differenz: –</div>
                     </div>
-                    <div class="ref-box right" id="ref-box-right" hidden>
-                        <div class="ref-box-top">
-                            <span class="ref-cam-name">KAMERA RECHTS</span>
-                            <button class="ref-btn-mini" id="btn-ref-reset-right" type="button" title="Aktuelles Bild als leeres Board speichern">Als leer setzen</button>
-                        </div>
+                    <div class="ref-box" id="ref-box-right" hidden>
+                        <div class="ref-box-top"><span class="ref-cam-name">KAMERA 2</span><button class="ref-btn-mini" id="btn-ref-reset-right" type="button" title="Aktuelles Bild als leeres Board speichern">Als leer setzen</button></div>
+                        <canvas class="ref-diff" id="ref-diff-right" width="320" height="180" aria-label="Differenzbild Kamera 2"></canvas>
                         <div class="ref-status-text" id="ref-text-right">Kein Referenzbild aktiv</div>
-                        <div class="ref-meta-text" id="ref-meta-right">Warte auf Kamerabild & Kalibrierung</div>
+                        <div class="ref-meta-text" id="ref-meta-right">Warte auf Kamerabild &amp; Kalibrierung</div>
+                        <div class="ref-meta-text" id="ref-diff-info-right">Differenz: –</div>
                     </div>
-                </div>
+                    <div class="ref-box" id="ref-box-third" hidden>
+                        <div class="ref-box-top"><span class="ref-cam-name">KAMERA 3</span><button class="ref-btn-mini" id="btn-ref-reset-third" type="button" title="Aktuelles Bild als leeres Board speichern">Als leer setzen</button></div>
+                        <canvas class="ref-diff" id="ref-diff-third" width="320" height="180" aria-label="Differenzbild Kamera 3"></canvas>
+                        <div class="ref-status-text" id="ref-text-third">Kein Referenzbild aktiv</div>
+                        <div class="ref-meta-text" id="ref-meta-third">Warte auf Kamerabild &amp; Kalibrierung</div>
+                        <div class="ref-meta-text" id="ref-diff-info-third">Differenz: –</div>
+                    </div>
+                    </div>
             </div>
 
             <div hidden>
@@ -541,11 +572,6 @@
             <details class="advanced-options">
                 <summary>Erweiterte Anzeige- und Erkennungsoptionen</summary>
                 <button class="btn-action" id="btn-grid" type="button">Kalibrierungsraster ein-/ausblenden</button>
-                <div class="mark-opts">
-                    <label><input type="checkbox" id="mk-tip"> Dartspitze (roter Punkt)</label>
-                    <label><input type="checkbox" id="mk-flight"> Flight markieren</label>
-                    <label><input type="checkbox" id="mk-label"> Beschriftung</label>
-                </div>
             </details>
 
             <p class="info-box">
@@ -1328,7 +1354,7 @@ function injectCss() {
   s.id = 'adv-css';
   s.textContent = `
 .adv-wrap{position:relative;overflow:hidden;background:#000}
-.adv-cal-canvas{position:absolute;inset:auto;width:auto;height:auto;touch-action:none;cursor:crosshair}
+.adv-cal-canvas{z-index:6;position:absolute;inset:auto;width:auto;height:auto;touch-action:none;cursor:crosshair}
 .adv-loupe{position:absolute;left:auto;right:auto;top:auto;bottom:auto;width:144px;height:144px;border:2px solid #fff;border-radius:50%;pointer-events:none;display:none;background:#000;box-shadow:0 2px 10px rgba(0,0,0,.6)}
 .adv-status{position:absolute;left:8px;top:8px;padding:4px 10px;border-radius:12px;background:rgba(0,0,0,.65);color:#fff;font:600 12px system-ui,sans-serif;pointer-events:none}
 .adv-panel{position:absolute;left:0;right:0;bottom:0;padding:10px;background:rgba(10,12,18,.88);color:#fff;font:14px system-ui,sans-serif;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
@@ -2123,11 +2149,13 @@ class AutoDartsEngine {
     }
     this.setStatus('Auto-Erkennung läuft …');
     let r = null;
-    try { r = await AutoBoardDetector.detect(media, this.cfg, m => this.setStatus(m)); }
-    catch (e) { this.setStatus('Auto-Erkennung nicht möglich: ' + e.message); }
-    if (!r) {
-      this.setStatus('Board nicht erkannt – bitte Punkte manuell setzen');
-      return this.calibrate();
+    try { r = await Promise.race([AutoBoardDetector.detect(media, this.cfg, m => this.setStatus(m)), new Promise((_, rej) => setTimeout(() => rej(new Error('Zeitüberschreitung')), 30000))]); }
+    catch (e) { r = null; this.setStatus('Auto-Erkennung nicht möglich – Schätzung wird verwendet'); }
+    if (!r || !r.points || r.points.length !== ANCHOR_COUNT) {
+      // Fallback: zentriertes Board schätzen, damit immer ein Ergebnis zum Feinjustieren vorliegt
+      const W = media.videoWidth || media.naturalWidth, H = media.videoHeight || media.naturalHeight, k = 0.42 * Math.min(W, H) / BOARD.rOuter;
+      const points = CALIB_TARGETS.map(t => ({ x: W / 2 + (t.x - BOARD.cx) * k, y: H / 2 + (t.y - BOARD.cy) * k }));
+      return this.calibrate(points, 'Schätzung – bitte Punkte prüfen und ziehen');
     }
     return this.calibrate(r.points, `Auto ${Math.round(r.confidence * 100)} % sicher`);
   }
@@ -2163,7 +2191,7 @@ class AutoDartsEngine {
     if (!this.camSize) return;
     const c = this.ensureMarks(), g = c.getContext('2d'), o = this.cfg.marks, s = Math.max(1, c.width / 640);
     g.clearRect(0, 0, c.width, c.height);
-    const label = (txt, x, y, col) => { g.font = `700 ${12 * s}px system-ui`; g.lineWidth = 3.5 * s; g.strokeStyle = 'rgba(0,0,0,.85)'; g.strokeText(txt, x, y); g.fillStyle = col; g.fillText(txt, x, y); };
+    const label = (txt, x, y, col) => { g.font = `700 ${16 * s}px system-ui`; g.lineWidth = 3.5 * s; g.strokeStyle = 'rgba(0,0,0,.85)'; g.strokeText(txt, x, y); g.fillStyle = col; g.fillText(txt, x, y); };
     this.turnDarts.forEach(d => {
       if (o.flight && d.flight) {
         g.setLineDash([5 * s, 3 * s]); g.strokeStyle = 'rgba(255,190,0,.95)'; g.lineWidth = 1.6 * s;
@@ -2173,8 +2201,10 @@ class AutoDartsEngine {
       }
       if (o.tip) {
         if (d.unsure) { g.setLineDash([3 * s, 3 * s]); g.strokeStyle = '#ffd43b'; g.lineWidth = 2 * s; g.beginPath(); g.arc(d.tip.x, d.tip.y, 11 * s, 0, 7); g.stroke(); g.setLineDash([]); }
+        g.strokeStyle = 'rgba(0,0,0,.85)'; g.lineWidth = 4.5 * s; g.beginPath(); g.arc(d.tip.x, d.tip.y, 11 * s, 0, 7); g.stroke();
+        g.strokeStyle = '#00ff88'; g.lineWidth = 2.2 * s; g.beginPath(); g.arc(d.tip.x, d.tip.y, 11 * s, 0, 7); g.stroke();
         g.fillStyle = '#ff2d2d'; g.strokeStyle = '#fff'; g.lineWidth = 2 * s;
-        g.beginPath(); g.arc(d.tip.x, d.tip.y, 4.5 * s, 0, 7); g.fill(); g.stroke();
+        g.beginPath(); g.arc(d.tip.x, d.tip.y, 5 * s, 0, 7); g.fill(); g.stroke();
       }
       if (o.label) label(d.label + (d.unsure ? '?' : ''), d.tip.x + 9 * s, d.tip.y - 9 * s, '#fff');
     });
@@ -2409,7 +2439,7 @@ class AutoDartsEngine {
     else this.setStatus(`${res.label} – Dart ${n}/${tn.darts}`);
     this.emitTurn();
     this.emit('throw', res);
-    this.feedback.show(res, final => this.submit(final), verdict => this.emit('verification', { verdict, res }));
+    this.submit(res); // kein Popup: Ergebnis wird nur im Bild markiert
   }
 
   submit(res) {
@@ -2534,26 +2564,51 @@ class StreamReceiver {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-    const $ = id => document.getElementById(id);
+    // Defensive DOM-Helfer: fehlende Elemente werden einmalig gemeldet und durch ein
+    // losgelöstes Platzhalter-Element ersetzt, damit Zugriffe wie .hidden, .textContent,
+    // .classList oder .addEventListener die Initialisierung nicht abbrechen.
+    const missingIds = new Map();
+    const $ = id => {
+        const el = document.getElementById(id);
+        if (el) return el;
+        if (!missingIds.has(id)) {
+            console.warn(`Element nicht vorhanden: ${id}`);
+            missingIds.set(id, document.createElement('div'));
+        }
+        return missingIds.get(id);
+    };
+    const bindEvent = (target, event, callback, options) => {
+        const element = typeof target === 'string' ? document.getElementById(target) : target;
+        if (!element) {
+            console.warn(`Element nicht vorhanden, Event "${event}" nicht gebunden: ${typeof target === 'string' ? target : '(unbekannt)'}`);
+            return false;
+        }
+        element.addEventListener(event, callback, options);
+        return true;
+    };
     const dot = $('status-dot'), statusEl = $('calibration-status'), list = $('throw-list'), totalEl = $('throw-total');
     let total = 0, gridOn = true, turnSum = 0;
 
-    const onScoredHit = r => {
+    const onScoredHit = (r, cam) => {
         total += r.points; turnSum += r.points; totalEl.textContent = total;
         const row = document.createElement('div'); row.className = 'throw-row';
         const view = r.viewAgreementMm != null ? ` <small>(2 Ansichten · Δ ${r.viewAgreementMm.toFixed(1)} mm)</small>` : '';
-        row.innerHTML = `<span>${r.label}${r.corrected ? ' <small>(korrigiert)</small>' : ''}${view}</span><span>${r.points}</span>`;
+        row.innerHTML = `<span><small>${cam}</small> ${r.label}${r.corrected ? ' <small>(korrigiert)</small>' : ''}${view}</span><span>${r.points}</span>`;
         list.prepend(row);
     };
 
-    const engine = new AutoDartsEngine({ container: $('camera-wrapper-left'), video: $('webcam'), onHit: onScoredHit });
+    const engine = new AutoDartsEngine({ container: $('camera-wrapper-left'), video: $('webcam'), onHit: r => onScoredHit(r, 'Kamera 1') });
     window.dartEngine = engine;
     await engine.start();
 
-    const rightEngine = new AutoDartsEngine({ container: $('camera-wrapper-right'), video: $('webcam-right'), onHit: onScoredHit });
+    const rightEngine = new AutoDartsEngine({ container: $('camera-wrapper-right'), video: $('webcam-right'), onHit: r => onScoredHit(r, 'Kamera 2') });
     rightEngine.lsKey = LS_KEY + '_right';
     window.dartRightEngine = rightEngine;
     await rightEngine.start();
+    const thirdEngine = new AutoDartsEngine({ container: $('camera-wrapper-third'), video: $('webcam-third'), onHit: r => onScoredHit(r, 'Kamera 3') });
+    thirdEngine.lsKey = LS_KEY + '_third';
+    window.dartThirdEngine = thirdEngine;
+    await thirdEngine.start();
 
     const bindReferencePanel = (side, targetEngine) => {
         const textEl = $(`ref-text-${side}`);
@@ -2565,7 +2620,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             textEl.classList.toggle('empty-state', info.type === 'empty');
             textEl.classList.toggle('dart-state', info.type === 'dart');
         });
-        resetBtn.addEventListener('click', () => {
+        bindEvent(resetBtn, 'click', () => {
             if (!targetEngine.H) {
                 targetEngine.setStatus('Bitte zuerst kalibrieren');
                 return;
@@ -2575,75 +2630,37 @@ document.addEventListener('DOMContentLoaded', async () => {
     };
     bindReferencePanel('left', engine);
     bindReferencePanel('right', rightEngine);
+    bindReferencePanel('third', thirdEngine);
 
-    const fusionWindowMs = 850, fusionQueues = { left: [], right: [] };
+    // Kontrollfeld: Differenz aktuelles Bild ↔ Referenzbild (schwarz = gleich, grün = verändert)
+    const diffViews = [['left', engine], ['right', rightEngine], ['third', thirdEngine]].map(([side, e]) => ({ e, cvs: $(`ref-diff-${side}`), txt: $(`ref-diff-info-${side}`) }));
+    setInterval(() => {
+        if (document.hidden) return;
+        for (const v of diffViews) {
+            const e = v.e;
+            if (!v.cvs.offsetParent || !e.reference || !e.media) continue;
+            try {
+                const m = e.motion, cur = m.grab(e.media), ref = e.reference;
+                if (cur.length !== ref.length) continue;
+                const w = m.w, h = m.h, thr = e.cfg.pixelThreshold;
+                if (v.cvs.width !== w || v.cvs.height !== h) { v.cvs.width = w; v.cvs.height = h; }
+                const ctx = v.cvs.getContext('2d'), img = ctx.createImageData(w, h), d = img.data;
+                let n = 0;
+                for (let i = 0, j = 0; i < cur.length; i++, j += 4) {
+                    d[j + 3] = 255;
+                    if ((!m.roi || m.roi[i]) && Math.abs(cur[i] - ref[i]) > thr) { n++; d[j + 1] = 255; d[j + 2] = 90; }
+                }
+                ctx.putImageData(img, 0, 0);
+                v.txt.textContent = `Differenz: ${(100 * n / (m.roiCount || cur.length)).toFixed(1)} % verändert`;
+            } catch (_) {}
+        }
+    }, 300);
+
+    const fusionWindowMs = 850, fusionQueues = { left: [], right: [], third: [] };
     let fusedTurnCount = 0;
     let secondCamEnabled = false;
 
-    const showByView = { left: engine.feedback.show.bind(engine.feedback), right: rightEngine.feedback.show.bind(rightEngine.feedback) };
-    engine.feedback.show = () => {};
-    rightEngine.feedback.show = () => {};
-
-    const openFeedback = (owner, res) => {
-        const finalRes = res;
-        showByView[owner].call(owner === 'left' ? engine.feedback : rightEngine.feedback, finalRes,
-            final => (owner === 'left' ? engine : rightEngine).submit(final),
-            verdict => (owner === 'left' ? engine : rightEngine).emit('verification', { verdict, res: finalRes }));
-    };
-
-    const finishObservation = (owner, observation, counterpart = null) => {
-        let res = observation.res;
-        if (counterpart) {
-            const a = observation.res, b = counterpart.res;
-            const dx = a.board.x - b.board.x, dy = a.board.y - b.board.y;
-            const disagreementMm = Math.hypot(dx, dy) * 170 / BOARD.rOuter;
-            const wa = Math.max(.08, Number(a.confidence) || .25), wb = Math.max(.08, Number(b.confidence) || .25);
-            const winner = disagreementMm > 5 ? (wa >= wb ? a : b) : null;
-            const x = winner ? winner.board.x : (a.board.x * wa + b.board.x * wb) / (wa + wb);
-            const y = winner ? winner.board.y : (a.board.y * wa + b.board.y * wb) / (wa + wb);
-            const scored = Scoring.fromBoard(x, y, DEFAULT_RADII);
-            const base = wa >= wb ? a : b;
-            res = Object.assign(scored, base, {
-                ...scored, board: { ...scored.board }, cameraSide: 'dual', source: 'multi-view',
-                confidence: Math.min(1, (wa + wb) / 2), unsure: !!winner || (a.unsure && b.unsure),
-                dartId: observation.res.dartId, cam: observation.res.cam, flight: observation.res.flight,
-                viewAgreementMm: disagreementMm,
-                viewEvidence: [{ side: 'left', camera: a.cam, confidence: a.confidence }, { side: 'right', camera: b.cam, confidence: b.confidence }],
-            });
-            $('fusion-status').textContent = `2 Kameras abgeglichen (Δ ${disagreementMm.toFixed(1)} mm)`;
-        } else if (secondCamEnabled) {
-            $('fusion-status').textContent = `${owner === 'left' ? 'Linke' : 'Rechte'} Ansicht allein`;
-        }
-        fusedTurnCount++;
-        if (fusedTurnCount >= engine.turnLimit && !engine.turnComplete) {
-            engine.turnComplete = true; engine.turnPauseUntil = Date.now() + 10000;
-            engine.emitTurn();
-            engine.emit('turn-complete', { darts: engine.turnDarts.slice(), source: 'multi-view-fallback' });
-        }
-        openFeedback(owner, res);
-    };
-
-    const queueObservation = (side, res) => {
-        if (!secondCamEnabled) {
-            finishObservation(side, { res, at: performance.now() }, null);
-            return;
-        }
-        const opposite = side === 'left' ? 'right' : 'left';
-        const q = fusionQueues[opposite];
-        const idx = q.findIndex(item => Math.abs(item.at - performance.now()) <= fusionWindowMs);
-        if (idx >= 0) {
-            const paired = q.splice(idx, 1)[0]; clearTimeout(paired.timer);
-            finishObservation(side, { res, at: performance.now() }, paired); return;
-        }
-        const item = { res, at: performance.now(), timer: null };
-        const own = fusionQueues[side];
-        while (own.length) { const stale = own.shift(); clearTimeout(stale.timer); finishObservation(side, stale); }
-        own.push(item);
-        item.timer = setTimeout(() => { const i = own.indexOf(item); if (i >= 0) { own.splice(i, 1); finishObservation(side, item); } }, fusionWindowMs);
-    };
-
-    engine.feedback.show = (res) => queueObservation('left', res);
-    rightEngine.feedback.show = (res) => queueObservation('right', res);
+    // Jede Kamera erkennt und bewertet einzeln (kein Abgleich zwischen Kameras).
 
     const vidEl = $('webcam');
     const controlsBar = $('video-controls-bar');
@@ -2652,12 +2669,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     const timeDisplay = $('vid-time');
     const screenshotBtn = $('vid-screenshot-btn');
 
-    playBtn.addEventListener('click', () => {
+    bindEvent(playBtn, 'click', () => {
         if (vidEl.paused) { vidEl.play(); playBtn.innerHTML = ICON.pause + 'Pause'; }
         else { vidEl.pause(); playBtn.innerHTML = ICON.play + 'Play'; }
     });
 
-    vidEl.addEventListener('timeupdate', () => {
+    bindEvent(vidEl, 'timeupdate', () => {
         if (!vidEl.duration) return;
         seekSlider.value = (vidEl.currentTime / vidEl.duration) * 100;
         const curMin = Math.floor(vidEl.currentTime / 60), curSec = Math.floor(vidEl.currentTime % 60);
@@ -2665,12 +2682,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         timeDisplay.textContent = `${curMin}:${curSec < 10 ? '0':''}${curSec} / ${durMin}:${durSec < 10 ? '0':''}${durSec}`;
     });
 
-    seekSlider.addEventListener('input', () => {
+    bindEvent(seekSlider, 'input', () => {
         if (!vidEl.duration) return;
         vidEl.currentTime = (seekSlider.value / 100) * vidEl.duration;
     });
 
-    screenshotBtn.addEventListener('click', () => {
+    bindEvent(screenshotBtn, 'click', () => {
         if (!vidEl.videoWidth || !vidEl.videoHeight) return;
         const canvas = document.createElement('canvas');
         canvas.width = vidEl.videoWidth;
@@ -2687,13 +2704,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.body.removeChild(a);
     });
 
-    const receivers = { left: null, right: null }, remoteStreams = { left: null, right: null };
+    const receivers = { left: null, right: null, third: null }, remoteStreams = { left: null, right: null, third: null }, localStreams = { left: null, right: null, third: null };
+    const enginesBySide = { left: engine, right: rightEngine, third: thirdEngine };
+    const sideLabel = { left: 'Kamera 1', right: 'Kamera 2', third: 'Kamera 3' };
     const generateCode = () => Math.floor(100000 + Math.random() * 900000).toString();
     const initPeerConnection = async side => {
       const code = generateCode();
-      const suffix = side === 'left' ? 'left' : 'right';
+      const suffix = side;
       $(`pairing-code-${suffix}`).textContent = code;
-      $(`pair-status-${suffix}`).textContent = secondCamEnabled ? `Warte auf ${side === 'left' ? 'linkes' : 'rechtes'} Handy` : 'Warte auf Handy';
+      $(`pair-status-${suffix}`).textContent = `Warte auf ${sideLabel[side]}-Handy`;
       $(`camera-status-${suffix}`).textContent = 'Code bereit';
       const qrContainer = $(`qrcode-${suffix}`);
       qrContainer.innerHTML = '';
@@ -2706,7 +2725,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const deps = { db, fs: { doc: m.doc, setDoc: m.setDoc, onSnapshot: m.onSnapshot, arrayUnion: m.arrayUnion }, RTCPeerConnection: window.RTCPeerConnection };
         if (receivers[side]) receivers[side].stop();
         remoteStreams[side]?.getTracks().forEach(track => track.stop());
-        const targetEngine = side === 'left' ? engine : rightEngine;
+        const targetEngine = enginesBySide[side];
         receivers[side] = new StreamReceiver(deps, code, stream => {
           remoteStreams[side] = stream;
           targetEngine.loadRemoteStream(stream);
@@ -2721,16 +2740,16 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     };
 
-    const stopSecondCamera = () => {
-        if (receivers.right) { receivers.right.stop(); receivers.right = null; }
-        if (remoteStreams.right) { remoteStreams.right.getTracks().forEach(t => t.stop()); remoteStreams.right = null; }
-        rightEngine.stopDetection();
-        rightEngine.resetTurnState();
-        if ($('webcam-right').srcObject) $('webcam-right').srcObject = null;
-        $('camera-status-right').textContent = 'Deaktiviert';
-        $('pair-status-right').textContent = 'Deaktiviert';
-        for (const pending of fusionQueues.right) clearTimeout(pending.timer);
-        fusionQueues.right.length = 0;
+    const stopCameraSide = side => {
+        if (receivers[side]) { receivers[side].stop(); receivers[side] = null; }
+        for (const stream of [remoteStreams[side], localStreams[side]]) if (stream) stream.getTracks().forEach(t => t.stop());
+        remoteStreams[side] = localStreams[side] = null;
+        const target = enginesBySide[side]; target.stopDetection(); target.resetTurnState();
+        const video = $(`webcam${side === 'left' ? '' : '-' + (side === 'right' ? 'right' : 'third')}`);
+        if (video.srcObject) video.srcObject = null;
+        $(`camera-status-${side}`).textContent = 'Deaktiviert';
+        $(`pair-status-${side}`).textContent = 'Deaktiviert';
+        if (fusionQueues[side]) { for (const pending of fusionQueues[side]) clearTimeout(pending.timer); fusionQueues[side].length = 0; }
     };
 
     const setSecondCameraEnabled = enabled => {
@@ -2738,38 +2757,98 @@ document.addEventListener('DOMContentLoaded', async () => {
         localStorage.setItem('dartly_second_cam_enabled', secondCamEnabled ? '1' : '0');
 
         $('pair-card-right').hidden = !secondCamEnabled;
+        $('camera-view-third').hidden = !thirdCamEnabled;
+        $('pair-card-third').hidden = !thirdCamEnabled;
+        $('ref-box-third').hidden = !thirdCamEnabled;
         $('camera-view-right').hidden = !secondCamEnabled;
         $('ref-box-right').hidden = !secondCamEnabled;
-        $('fusion-status').hidden = !secondCamEnabled;
+        $('fusion-status').hidden = true;
 
-        $('dual-pair-grid').classList.toggle('single-cam', !secondCamEnabled);
-        $('dual-camera-grid').classList.toggle('single-cam', !secondCamEnabled);
-        $('ref-grid').classList.toggle('single-cam', !secondCamEnabled);
+        const multiCam = secondCamEnabled || thirdCamEnabled;
+        $('dual-pair-grid').classList.toggle('single-cam', !multiCam);
+        $('dual-camera-grid').classList.toggle('single-cam', !multiCam);
+        $('ref-grid').classList.toggle('single-cam', !multiCam);
 
-        $('pair-label-left').textContent = secondCamEnabled ? 'KAMERA LINKS · PAIRING-CODE' : 'KAMERA · PAIRING-CODE';
-        $('btn-new-code-left').textContent = secondCamEnabled ? 'Neuer Code links' : 'Neuer Code';
-        $('camera-title-left').textContent = secondCamEnabled ? 'Ansicht links' : 'Boardkamera';
-        $('ref-cam-name-left').textContent = secondCamEnabled ? 'KAMERA LINKS' : 'HAUPTKAMERA';
-        $('cam-mode-hint').textContent = secondCamEnabled ? 'Multi-View (2 Kameras) aktiv' : '1-Kamera-Modus aktiv';
+        $('pair-label-left').textContent = 'KAMERA 1 · PAIRING-CODE';
+        $('btn-new-code-left').textContent = 'Neuer Code';
+        $('camera-title-left').textContent = 'Kamera 1';
+        $('ref-cam-name-left').textContent = 'KAMERA 1';
+        $('cam-mode-hint').textContent = `${1 + (secondCamEnabled ? 1 : 0) + (thirdCamEnabled ? 1 : 0)} Kamera(n) aktiv`;
+        $('fusion-status').textContent = 'Jede Kamera erkennt einzeln.';
 
         engine.layoutOverlays();
         if (secondCamEnabled) {
             initPeerConnection('right');
             setTimeout(() => rightEngine.layoutOverlays(), 50);
         } else {
-            stopSecondCamera();
+            stopCameraSide('right');
         }
+        if (thirdCamEnabled) { initPeerConnection('third'); setTimeout(() => thirdEngine.layoutOverlays(), 50); }
+        else stopCameraSide('third');
     };
 
     const toggleSecondCamCb = $('toggle-second-cam');
     const savedSecondCam = localStorage.getItem('dartly_second_cam_enabled') === '1';
+    let thirdCamEnabled = localStorage.getItem('dartly_third_cam_enabled') === '1';
     toggleSecondCamCb.checked = savedSecondCam;
+    $('toggle-third-cam').checked = thirdCamEnabled;
 
-    $('btn-new-code-left').addEventListener('click', () => initPeerConnection('left'));
-    $('btn-new-code-right').addEventListener('click', () => initPeerConnection('right'));
+    bindEvent('btn-new-code-left', 'click', () => initPeerConnection('left'));
+    bindEvent('btn-new-code-right', 'click', () => initPeerConnection('right'));
+    bindEvent('btn-new-code-third', 'click', () => initPeerConnection('third'));
     initPeerConnection('left');
     setSecondCameraEnabled(savedSecondCam);
-    toggleSecondCamCb.addEventListener('change', () => setSecondCameraEnabled(toggleSecondCamCb.checked));
+    bindEvent(toggleSecondCamCb, 'change', () => setSecondCameraEnabled(toggleSecondCamCb.checked));
+    bindEvent('toggle-third-cam', 'change', () => {
+      thirdCamEnabled = $('toggle-third-cam').checked;
+      localStorage.setItem('dartly_third_cam_enabled', thirdCamEnabled ? '1' : '0');
+      const multiCam = secondCamEnabled || thirdCamEnabled;
+      $('camera-view-third').hidden = !thirdCamEnabled; $('pair-card-third').hidden = !thirdCamEnabled; $('ref-box-third').hidden = !thirdCamEnabled;
+      $('dual-pair-grid').classList.toggle('single-cam', !multiCam); $('dual-camera-grid').classList.toggle('single-cam', !multiCam); $('ref-grid').classList.toggle('single-cam', !multiCam);
+      $('fusion-status').hidden = true; $('cam-mode-hint').textContent = `${1 + (secondCamEnabled ? 1 : 0) + (thirdCamEnabled ? 1 : 0)} Kamera(n) aktiv`;
+      if (thirdCamEnabled) { initPeerConnection('third'); setTimeout(() => thirdEngine.layoutOverlays(), 50); } else stopCameraSide('third');
+    });
+
+    // Lokale USB-/UVC-Kameras über die Browser-Mediengeräteauswahl.
+    async function refreshCameraChoices(side) {
+      const select = $(`camera-source-${side}`); if (!select) return;
+      const current = select.value; select.innerHTML = '<option value="remote">Handy / WebRTC</option>';
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        devices.filter(d => d.kind === 'videoinput').forEach((d, i) => {
+          const option = document.createElement('option'); option.value = d.deviceId;
+          option.textContent = d.label || `USB-/Webcam ${i + 1}`; select.appendChild(option);
+        });
+        if ([...select.options].some(o => o.value === current)) select.value = current;
+      } catch (err) { $(`camera-status-${side}`).textContent = 'Gerätezugriff nicht verfügbar'; }
+    }
+    async function connectLocalCamera(side) {
+      const select = $(`camera-source-${side}`), deviceId = select.value;
+      if (!deviceId || deviceId === 'remote') { $(`camera-status-${side}`).textContent = 'Warte auf WebRTC-Handy'; return; }
+      try {
+        if (receivers[side]) { receivers[side].stop(); receivers[side] = null; }
+        if (remoteStreams[side]) { remoteStreams[side].getTracks().forEach(t => t.stop()); remoteStreams[side] = null; }
+        if (localStreams[side]) localStreams[side].getTracks().forEach(t => t.stop());
+        const stream = await navigator.mediaDevices.getUserMedia({ audio:false, video:{ deviceId:{ exact:deviceId }, width:{ ideal:1280 }, height:{ ideal:720 } } });
+        localStreams[side] = stream; remoteStreams[side] = null;
+        enginesBySide[side].loadRemoteStream(stream);
+        $(`camera-status-${side}`).textContent = 'USB-/Webkamera aktiv';
+        await refreshCameraChoices(side);
+        select.value = deviceId;
+      } catch (err) { $(`camera-status-${side}`).textContent = `Kamera nicht verfügbar: ${err.message || err.name}`; }
+    }
+    for (const side of ['left','right','third']) {
+      bindEvent(`camera-source-${side}`, 'change', () => {
+        if ($(`camera-source-${side}`).value === 'remote') {
+          if (localStreams[side]) localStreams[side].getTracks().forEach(t => t.stop());
+          localStreams[side] = null; $(`camera-status-${side}`).textContent = 'Warte auf WebRTC-Handy';
+          if (side === 'left') initPeerConnection('left'); else if ((side === 'right' && secondCamEnabled) || (side === 'third' && thirdCamEnabled)) initPeerConnection(side);
+        } else connectLocalCamera(side);
+      });
+      bindEvent(`camera-refresh-${side}`, 'click', async () => { await refreshCameraChoices(side); if (navigator.mediaDevices?.getUserMedia) { try { const temp=await navigator.mediaDevices.getUserMedia({video:true,audio:false}); temp.getTracks().forEach(t=>t.stop()); await refreshCameraChoices(side); } catch(e) {} } });
+      await refreshCameraChoices(side);
+    }
+    if (navigator.mediaDevices?.addEventListener) navigator.mediaDevices.addEventListener('devicechange', () => ['left','right','third'].forEach(refreshCameraChoices));
 
     loadOpenCV(engine.cfg.opencvUrl).catch(() => {});
 
@@ -2786,28 +2865,32 @@ document.addEventListener('DOMContentLoaded', async () => {
     engine.on('status', t => { statusEl.textContent = t; syncDot(); });
     engine.on('calibrated', () => { syncDot(); engine.showGrid(gridOn); });
     rightEngine.on('media-ready', () => { rightEngine.showGrid(gridOn && !!rightEngine.H); });
+    thirdEngine.on('media-ready', () => { thirdEngine.showGrid(gridOn && !!thirdEngine.H); });
+    thirdEngine.on('calibrated', () => { thirdEngine.showGrid(gridOn); $('camera-status-third').textContent = 'Kalibriert'; });
     rightEngine.on('calibrated', () => {
         rightEngine.showGrid(gridOn);
         const dist = DartLocator.estimateCameraDistance(rightEngine.H, rightEngine.camSize.w, rightEngine.camSize.h);
         $('camera-status-right').textContent = dist ? `Kalibriert (${dist} cm)` : 'Kalibriert';
     });
 
-    $('btn-reset').addEventListener('click', async () => { engine.clearCalibration(); engine.showGrid(false); syncDot(); await engine.calibrate(); });
-    $('btn-auto-left').addEventListener('click', () => engine.autoCalibrate());
-    $('btn-manual-left').addEventListener('click', () => engine.calibrate());
-    $('btn-auto-right').addEventListener('click', () => rightEngine.autoCalibrate());
-    $('btn-manual-right').addEventListener('click', () => rightEngine.calibrate());
-    $('btn-grid').addEventListener('click', () => { gridOn = !gridOn; engine.showGrid(gridOn); if (secondCamEnabled) rightEngine.showGrid(gridOn && !!rightEngine.H); });
+    bindEvent('btn-reset', 'click', async () => { engine.clearCalibration(); engine.showGrid(false); syncDot(); await engine.autoCalibrate(); });
+    bindEvent('btn-auto-left', 'click', () => engine.autoCalibrate());
+    bindEvent('btn-manual-left', 'click', () => engine.calibrate());
+    bindEvent('btn-auto-right', 'click', () => rightEngine.autoCalibrate());
+    bindEvent('btn-manual-right', 'click', () => rightEngine.calibrate());
+    bindEvent('btn-auto-third', 'click', () => thirdEngine.autoCalibrate());
+    bindEvent('btn-manual-third', 'click', () => thirdEngine.calibrate());
+    bindEvent('btn-grid', 'click', () => { gridOn = !gridOn; engine.showGrid(gridOn); if (secondCamEnabled) rightEngine.showGrid(gridOn && !!rightEngine.H); if (thirdCamEnabled) thirdEngine.showGrid(gridOn && !!thirdEngine.H); });
 
-    $('btn-upload-img').addEventListener('click', () => $('image-upload-input').click());
-    $('image-upload-input').addEventListener('change', e => {
+    bindEvent('btn-upload-img', 'click', () => $('image-upload-input').click());
+    bindEvent('image-upload-input', 'change', e => {
         const file = e.target.files[0]; if (!file) return;
         e.target.value = '';
         const img = new Image();
         img.onload = () => { controlsBar.style.display = 'none'; engine.loadScreenshot(img); $('btn-live').hidden = false; syncDot(); engine.showGrid(gridOn && !!engine.H); };
         img.src = URL.createObjectURL(file);
     });
-    $('btn-live').addEventListener('click', () => { engine.exitScreenshot(); $('btn-live').hidden = true; syncDot(); engine.showGrid(gridOn && !!engine.H); });
+    bindEvent('btn-live', 'click', () => { engine.exitScreenshot(); $('btn-live').hidden = true; syncDot(); engine.showGrid(gridOn && !!engine.H); });
     engine.on('screenshot-exit', () => { $('btn-live').hidden = true; });
     engine.on('media-ready', () => { syncDot(); engine.showGrid(gridOn && !!engine.H); });
 
@@ -2835,7 +2918,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (rightEngine.pendingEndTurn) rightEngine.endTurn(rightEngine.pendingEndTurn.g, rightEngine.pendingEndTurn.cur, 'removed-after-skip');
         if (resumeVideo && engine.isVideoFileMode && vidEl.paused) vidEl.play().catch(() => {});
     };
-    skipPauseBtn.addEventListener('click', () => stopPullPause());
+    bindEvent(skipPauseBtn, 'click', () => stopPullPause());
     engine.on('turn-complete', () => {
         if (engine.isVideoFileMode) {
             vidEl.pause();
@@ -2864,6 +2947,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (engine.pendingEndTurn) engine.endTurn(engine.pendingEndTurn.g, engine.pendingEndTurn.cur, 'removed-after-pause');
                 else engine.setStatus('Bitte Darts ziehen.');
                 if (rightEngine.pendingEndTurn) rightEngine.endTurn(rightEngine.pendingEndTurn.g, rightEngine.pendingEndTurn.cur, 'removed-after-pause');
+                if (thirdEngine.pendingEndTurn) thirdEngine.endTurn(thirdEngine.pendingEndTurn.g, thirdEngine.pendingEndTurn.cur, 'removed-after-pause');
                 return;
             }
             const nextTick = remaining - (seconds - 1) * 1000;
@@ -2872,8 +2956,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         pauseUpdateFn = updatePause;
         updatePause();
     });
-    vidEl.addEventListener('play', () => { if (engine.isVideoFileMode) playBtn.innerHTML = ICON.pause + 'Pause'; });
-    vidEl.addEventListener('pause', () => { if (engine.isVideoFileMode) playBtn.innerHTML = ICON.play + 'Weiter'; });
+    bindEvent(vidEl, 'play', () => { if (engine.isVideoFileMode) playBtn.innerHTML = ICON.pause + 'Pause'; });
+    bindEvent(vidEl, 'pause', () => { if (engine.isVideoFileMode) playBtn.innerHTML = ICON.play + 'Weiter'; });
     engine.on('turn-reset', ({ darts }) => {
         fusedTurnCount = 0;
         for (const side of ['left','right']) { for (const pending of fusionQueues[side]) clearTimeout(pending.timer); fusionQueues[side].length = 0; }
@@ -2885,13 +2969,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
     document.addEventListener('visibilitychange', () => { if (!document.hidden && pauseUpdateFn) pauseUpdateFn(); });
     try { Object.assign(engine.cfg.marks, JSON.parse(localStorage.getItem('dartly_marks') || '{}')); } catch (_) {}
-    ['tip', 'flight', 'label'].forEach(k => {
-        const cb = $('mk-' + k); cb.checked = !!engine.cfg.marks[k];
-        cb.addEventListener('change', () => { engine.cfg.marks[k] = cb.checked; localStorage.setItem('dartly_marks', JSON.stringify(engine.cfg.marks)); engine.drawMarks(); });
-    });
 
-    $('btn-upload-vid').addEventListener('click', () => $('video-upload-input').click());
-    $('video-upload-input').addEventListener('change', e => {
+    bindEvent('btn-upload-vid', 'click', () => $('video-upload-input').click());
+    bindEvent('video-upload-input', 'change', e => {
         const file = e.target.files[0];
         if (!file) return;
         const fileUrl = URL.createObjectURL(file);
