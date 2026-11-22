@@ -1,7 +1,7 @@
 {
   "name": "Dartly – Handy als Board-Kamera",
   "short_name": "Dartly",
-  "start_url": "./camera_stream.html",
+  "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#0a0c10",
   "theme_color": "#00ff88",
