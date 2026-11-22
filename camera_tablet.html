@@ -573,15 +573,6 @@
 
             <div class="turn-hud" id="turn-hud"><span class="pips" id="turn-pips"></span><span class="turn-countdown" id="turn-text" aria-live="polite">Bereit – Darts werfen</span><div class="pause-countdown" id="pause-countdown" hidden><strong id="pause-seconds">10</strong><span>Sek. Dartpause</span><i aria-hidden="true"></i></div><button class="btn-action turn-pause-skip" id="turn-pause-skip" type="button" hidden>Pause vorzeitig beenden</button></div>
 
-            <details class="advanced-options"><summary>Datensatz-Upload (Ultralytics)</summary>
-                <div class="yolo-box">
-                    <label class="cam-toggle-label"><input type="checkbox" id="ultra-on"> „Frame speichern“ lädt direkt in den Datensatz hoch</label>
-                    <label>Datensatz (Besitzer/Name)<input type="text" id="ultra-dataset" value="greenluc/20261107" autocapitalize="off"></label>
-                    <label>API-Key (ul_…)<input type="password" id="ultra-key" autocomplete="off" placeholder="ul_…"></label>
-                    <label>Split<select id="ultra-split"><option value="train">train</option><option value="val">val</option></select></label>
-                    <div class="ref-meta-text" id="ultra-status">Aus: Frames werden nur lokal gesammelt</div>
-                </div>
-            </details>
             <details class="advanced-options"><summary>Datensatz (lokal sammeln &amp; exportieren)</summary>
                 <div class="yolo-box">
                     <div class="ref-meta-text" id="ds-count">Datensatz: 0 Bilder</div>
@@ -1801,7 +1792,15 @@ class DartLocator {
     const n = best.length, xs = new Float64Array(n), ys = new Float64Array(n);
     let mx = 0, my = 0; for (let i = 0; i < n; i++) { xs[i] = best[i] % bw + x0 + 0.5; ys[i] = ((best[i] / bw) | 0) + y0 + 0.5; mx += xs[i]; my += ys[i]; }
     mx /= n; my /= n;
+    // Hauptachse der Fläche: Liegt der Dart schräg zur Boardnormalen, ist die Projektion auf die Normale unzuverlässig (breite Flight-Ecken
+    // können die Spitze verdrängen) -> bei sehr schrägen Darts (> ~70° zur Normalen) entscheidet der Pfad mit Abstimmung unten.
+    let alignOK = false;
     if (opts.normalDir) {
+      let sxx = 0, syy = 0, sxy = 0; for (let i = 0; i < n; i++) { const dx = xs[i] - mx, dy = ys[i] - my; sxx += dx * dx; syy += dy * dy; sxy += dx * dy; }
+      const th = 0.5 * Math.atan2(2 * sxy, sxx - syy), nd0 = opts.normalDir;
+      alignOK = Math.abs(Math.cos(th) * nd0.x + Math.sin(th) * nd0.y) / (Math.hypot(nd0.x, nd0.y) || 1) >= 0.35;
+    }
+    if (opts.normalDir && alignOK) {
       const nd = opts.normalDir, pr = new Float64Array(n); let pmin = Infinity, pmax = -Infinity;
       for (let i = 0; i < n; i++) { pr[i] = xs[i] * nd.x + ys[i] * nd.y; if (pr[i] < pmin) pmin = pr[i]; if (pr[i] > pmax) pmax = pr[i]; }
        const ext = pmax - pmin, band = 1.5;
@@ -1844,10 +1843,15 @@ class DartLocator {
       const a = Math.hypot(mx + tmin * ux - opts.center.x, my + tmin * uy - opts.center.y), b = Math.hypot(mx + tmax * ux - opts.center.x, my + tmax * uy - opts.center.y);
       tipIsMin = a < b;
     }
-    if (opts.normalDir) {
-      const dot = ux * opts.normalDir.x + uy * opts.normalDir.y;
-      if (Math.abs(dot) > 0.25) tipIsMin = dot > 0;
-    }
+    // Spitze/Flight per gewichteter Abstimmung mehrerer Hinweise entscheiden (verhindert, dass der Flight als Spitze gewertet wird)
+    let vote = 0, vw = 0; const add = (v, wgt) => { vote += v * wgt; vw += wgt; };
+    add(tipIsMin ? 1 : -1, 1.0);                                                       // Breitenschwerpunkt (bisheriger Hinweis)
+    const wMn = (cnt[0] + cnt[1] + cnt[2]) / 3, wMx = (cnt[nb - 1] + cnt[nb - 2] + cnt[nb - 3]) / 3;
+    add(wMx > wMn ? 1 : -1, 2.0 * Math.abs(wMx - wMn) / Math.max(1e-6, wMx + wMn));   // Spitze ist schmal, Flight breit
+    add(-(tmin + tmax) > 0 ? 1 : -1, 1.2 * Math.min(1, Math.abs(tmin + tmax) / (0.3 * len))); // Masse liegt auf der Flight-Seite
+    if (opts.normalDir) { const dot = ux * opts.normalDir.x + uy * opts.normalDir.y; add(dot > 0 ? 1 : -1, Math.abs(dot) > 0.25 ? 3.0 * Math.abs(dot) : Math.abs(dot)); } // Boardnormale
+    tipIsMin = vote >= 0;
+    const ambiguous = vw > 0 && Math.abs(vote) / vw < 0.25;
     const tTip = tipIsMin ? tmin : tmax, sgn = tipIsMin ? 1 : -1;
     let sx_ = 0, sy_ = 0, sn = 0; const span = Math.max(1.5, len * 0.05);
     for (let i = 0; i < n; i++) if (Math.abs(tt[i] - tTip) <= span) { sx_ += xs[i]; sy_ += ys[i]; sn++; }
@@ -1874,7 +1878,7 @@ class DartLocator {
         const normCX = toCenterX / centerDist;
         const normCY = toCenterY / centerDist;
         const axisDot = Math.abs(ux * normCX + uy * normCY);
-        if (axisDot < 0.15 && !opts.frontal) {
+        if (axisDot < 0.15 && !opts.frontal && !opts.normalDir) {
           return null; // Verworfen, da Achsenwinkel nicht zum Boardzentrum passt
         }
       }
@@ -1884,8 +1888,9 @@ class DartLocator {
     for (let i = 0; i < n; i++) { const bi = Math.min(nb - 1, Math.floor(((tt[i] - tmin) / len) * nb)); if (cnt[bi] >= 0.6 * cmax) { fx += xs[i]; fy += ys[i]; fn++; } }
     const tFl = tipIsMin ? tmax : tmin; let ex = 0, ey = 0, en = 0;
     for (let i = 0; i < n; i++) if (Math.abs(tt[i] - tFl) <= span) { ex += xs[i]; ey += ys[i]; en++; }
-    const conf = Math.min(1, (ratio - 1) / 0.8) * Math.min(1, elong / 3);
-    return { tip, flight: { x: fx / fn, y: fy / fn }, flightEnd: { x: ex / en, y: ey / en }, axis: { x: sgn * ux, y: sgn * uy }, conf, elong, ratio, area: n, compact: false };
+    const ratioF = cmax / Math.max(1e-6, (tipIsMin ? [0, 1, 2] : [nb - 3, nb - 2, nb - 1]).reduce((s2, i) => s2 + cnt[i], 0) / 3);
+    const conf = Math.min(1, (ratioF - 1) / 0.8) * Math.min(1, elong / 3) * (ambiguous ? 0.7 : 1);
+    return { tip, flight: { x: fx / fn, y: fy / fn }, flightEnd: { x: ex / en, y: ey / en }, axis: { x: sgn * ux, y: sgn * uy }, conf, elong, ratio: ratioF, area: n, compact: false, ambiguous };
   }
 
   static dilate(m, w, h) {
@@ -2073,39 +2078,6 @@ const Dataset = {
     for (let i = 0; i < rows.length; i++) files.push({ name: `datasets/darts/images/${i % 5 === 4 ? 'val' : 'train'}/frame_${String(i + 1).padStart(4, '0')}.jpg`, data: new Uint8Array(await rows[i].blob.arrayBuffer()) });
     files.push({ name: 'datasets/darts/data.yaml', data: new TextEncoder().encode('path: .\ntrain: images/train\nval: images/val\nnames:\n  0: dart\n') });
     return this.zip(files);
-  }
-};
-
-// ===== Ultralytics Platform: gesammelte Frames als ZIP in den Datensatz hochladen =====
-const ULTRA = {
-  api: 'https://platform.ultralytics.com/api', q: [], timer: null, delay: 5000,
-  cfg() { try { return JSON.parse(localStorage.getItem('autodarts_ultra') || '{}'); } catch (_) { return {}; } },
-  say(t) { const e = document.getElementById('ultra-status'); if (e) e.textContent = t; },
-  enqueue(blob) {
-    this.q.push({ name: `autodarts-${Date.now()}-${this.q.length}.jpg`, blob });
-    this.say(`${this.q.length} Frame(s) in der Warteschlange – Upload startet gleich …`);
-    clearTimeout(this.timer); this.timer = setTimeout(() => this.flush(), this.delay);
-  },
-  async flush() {
-    const items = this.q.splice(0); if (!items.length) return;
-    const c = this.cfg(), [owner, slug] = (c.dataset || '').split('/'), H = { Authorization: 'Bearer ' + (c.key || '') }, J = { ...H, 'Content-Type': 'application/json' };
-    const ok = async (r, what) => { if (!r.ok) throw new Error(`${what}: HTTP ${r.status}`); return r.json(); };
-    let zip;
-    try {
-      this.say(`Lade ${items.length} Frame(s) hoch …`);
-      zip = Dataset.zip(await Promise.all(items.map(async i => ({ name: i.name, data: new Uint8Array(await i.blob.arrayBuffer()) }))));
-      const ds = await ok(await fetch(`${this.api}/datasets/${owner}/${slug}`, { headers: H }), 'Datensatz');
-      const up = await ok(await fetch(`${this.api}/upload/signed-url`, { method: 'POST', headers: J, body: JSON.stringify({ assetType: 'datasets', assetId: ds.dataset?.id || ds.id, filename: 'frames.zip', contentType: 'application/zip', totalBytes: zip.size }) }), 'Upload-URL');
-      const put = await fetch(up.uploadUrl, { method: 'PUT', headers: { 'Content-Type': 'application/zip', ...(up.headers || {}) }, body: zip });
-      if (!put.ok) throw new Error('Hochladen: HTTP ' + put.status);
-      await ok(await fetch(`${this.api}/upload/complete`, { method: 'POST', headers: J, body: JSON.stringify({ sessionId: up.sessionId }) }), 'Abschluss');
-      await ok(await fetch(`${this.api}/datasets/${owner}/${slug}/ingest`, { method: 'POST', headers: J, body: JSON.stringify({ sessionId: up.sessionId, targetSplit: c.split || 'train', conflictPolicy: 'keep_both' }) }), 'Import');
-      this.say(`${items.length} Frame(s) an ${owner}/${slug} gesendet (${c.split || 'train'}).`);
-    } catch (err) { // Fallback: ZIP lokal speichern (die Frames liegen außerdem im lokalen Datensatz)
-      this.say('Upload fehlgeschlagen (' + err.message + ') – ZIP lokal gespeichert, bitte manuell hochladen.');
-      const a = document.createElement('a'); a.href = URL.createObjectURL(zip || Dataset.zip([])); a.download = `autodarts-frames-${Math.floor(Date.now() / 1000)}.zip`;
-      document.body.append(a); a.click(); a.remove();
-    }
   }
 };
 
@@ -2479,7 +2451,7 @@ class AutoDartsEngine {
       const r = DartLocator.analyze(ref.g, cur.g, cur.w, cur.h, box, { seed, center: Homography.apply(Hs, BOARD.cx, BOARD.cy), normalDir: nd });
       if (r) {
         const frontal = !!nd && nd.ang < 20;
-        return { tip: { x: r.tip.x / sc, y: r.tip.y / sc }, flight: { x: r.flight.x / sc, y: r.flight.y / sc }, conf: r.conf, unsure: r.conf < 0.5 || r.compact || frontal, frontal, D: nd ? nd.ang : 0, cameraSide: nd?.cameraSide || 'unknown', cameraBoardX: nd?.cameraBoardX ?? null, ext: r.elong, source: nd ? 'full-pose-axis' : 'full-axis' };
+        return { tip: { x: r.tip.x / sc, y: r.tip.y / sc }, flight: { x: r.flight.x / sc, y: r.flight.y / sc }, conf: r.conf, unsure: r.conf < 0.5 || r.compact || frontal || r.ambiguous, frontal, D: nd ? nd.ang : 0, cameraSide: nd?.cameraSide || 'unknown', cameraBoardX: nd?.cameraBoardX ?? null, ext: r.elong, source: nd ? 'full-pose-axis' : 'full-axis' };
       }
     }
     const center = Homography.apply(this.Hinv, BOARD.cx, BOARD.cy);
@@ -2769,6 +2741,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const dot = $('status-dot'), statusEl = $('calibration-status'), list = $('throw-list'), totalEl = $('throw-total');
     let total = 0, gridOn = true, turnSum = 0;
 
+    try { localStorage.removeItem('autodarts_ultra'); localStorage.removeItem('autodarts_yolo'); } catch (_) {} // alte Zugangsdaten entfernen
     const fuse = { on: false, recent: [] };
     bindEvent('fuse-cams', 'change', ev => { fuse.on = ev.target.checked; fuse.recent = []; });
     const onScoredHit = (r, cam) => {
@@ -2835,18 +2808,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         new MutationObserver(() => { if (panel.childElementCount && panel.parentElement.tagName === 'DETAILS') panel.parentElement.open = true; }).observe(panel, { childList: true });
     }
 
-    // Datensatz-Upload: Einstellungen speichern
-    {
-        const uc = ULTRA.cfg();
-        if (uc.dataset) $('ultra-dataset').value = uc.dataset; if (uc.key) $('ultra-key').value = uc.key; if (uc.split) $('ultra-split').value = uc.split; $('ultra-on').checked = !!uc.on;
-        const save = () => {
-            const v = { on: $('ultra-on').checked, dataset: $('ultra-dataset').value.trim().replace(/^.*datasets\//, ''), key: $('ultra-key').value.trim(), split: $('ultra-split').value };
-            try { localStorage.setItem('autodarts_ultra', JSON.stringify(v)); } catch (_) {}
-            ULTRA.say(v.on ? (v.key && v.dataset.includes('/') ? `Aktiv: Frames gehen an ${v.dataset} (${v.split})` : 'Bitte API-Key und Datensatz (Besitzer/Name) eintragen') : 'Aus: Frames werden nur lokal gesammelt');
-        };
-        ['ultra-on', 'ultra-dataset', 'ultra-key', 'ultra-split'].forEach(id => bindEvent(id, 'change', save)); save();
-    }
-
     const fusionWindowMs = 850, fusionQueues = { left: [], right: [], third: [] };
     let fusedTurnCount = 0;
     let secondCamEnabled = false;
@@ -2886,8 +2847,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         canvas.width = vidEl.videoWidth; canvas.height = vidEl.videoHeight;
         canvas.getContext('2d').drawImage(vidEl, 0, 0, canvas.width, canvas.height);
         canvas.toBlob(async blob => {
-            const old = screenshotBtn.innerHTML, uc = ULTRA.cfg();
-            if (uc.on && uc.key && uc.dataset) ULTRA.enqueue(blob);
+            const old = screenshotBtn.innerHTML;
             try { await Dataset.add(blob); const n = await dsRefresh(); screenshotBtn.textContent = `✓ Im Datensatz (${n})`; }
             catch (err) { screenshotBtn.textContent = 'Speichern fehlgeschlagen'; console.warn(err); }
             setTimeout(() => { screenshotBtn.innerHTML = old; }, 1500);
