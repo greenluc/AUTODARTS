@@ -452,6 +452,7 @@
         .cal-field .adv-panel { position:static; padding:8px 0 0; background:none; }
         .cam-collapse > summary, .cal-field > summary, .throws-sum { cursor:pointer; min-height:40px; }
         .throws-sum { font-family:'Rajdhani',sans-serif; font-size:1.2rem; font-weight:700; margin-bottom:8px; }
+        .yolo-box { display:grid; gap:12px; padding-top:8px; } .yolo-box label { display:grid; gap:6px; } .yolo-box input[type=password], .yolo-box select, .yolo-box input[type=text] { font-size:16px; min-height:44px; padding:0 10px; border-radius:10px; border:1px solid var(--glass-border); background:rgba(0,0,0,.25); color:inherit; }
         [hidden] { display:none !important; }
         .throw-sep { padding:6px 4px; color:var(--accent); font-weight:700; font-size:.85rem; border-bottom:1px dashed var(--glass-border); }
     </style>
@@ -552,7 +553,7 @@
                 <button class="btn-action" id="vid-play-btn"><svg class="ico" viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>Pause</button>
                 <input type="range" id="vid-seek" value="0" min="0" max="100" step="0.1">
                 <span id="vid-time" style="font-size: 0.85rem; font-variant-numeric: tabular-nums;">0:00 / 0:00</span>
-                <button class="btn-action" id="vid-screenshot-btn" style="background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.3);"><svg class="ico" viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Screenshot speichern</button>
+                <button class="btn-action" id="vid-screenshot-btn" style="background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.3);"><svg class="ico" viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Frame speichern</button>
             </div>
 
             <details class="advanced-options" open><summary>Status &amp; Aktionen</summary>
@@ -571,7 +572,30 @@
             </details>
 
             <div class="turn-hud" id="turn-hud"><span class="pips" id="turn-pips"></span><span class="turn-countdown" id="turn-text" aria-live="polite">Bereit – Darts werfen</span><div class="pause-countdown" id="pause-countdown" hidden><strong id="pause-seconds">10</strong><span>Sek. Dartpause</span><i aria-hidden="true"></i></div><button class="btn-action turn-pause-skip" id="turn-pause-skip" type="button" hidden>Pause vorzeitig beenden</button></div>
-<details class="advanced-options">
+
+            <details class="advanced-options"><summary>Datensatz-Upload (Ultralytics)</summary>
+                <div class="yolo-box">
+                    <label class="cam-toggle-label"><input type="checkbox" id="ultra-on"> „Frame speichern“ lädt direkt in den Datensatz hoch</label>
+                    <label>Datensatz (Besitzer/Name)<input type="text" id="ultra-dataset" value="greenluc/20261107" autocapitalize="off"></label>
+                    <label>API-Key (ul_…)<input type="password" id="ultra-key" autocomplete="off" placeholder="ul_…"></label>
+                    <label>Split<select id="ultra-split"><option value="train">train</option><option value="val">val</option></select></label>
+                    <div class="ref-meta-text" id="ultra-status">Aus: Frames werden nur lokal gesammelt</div>
+                </div>
+            </details>
+            <details class="advanced-options"><summary>YOLO-Erkennung &amp; Datensatz (Beta)</summary>
+                <div class="yolo-box">
+                    <label class="btn-action" for="yolo-model">YOLO-Modell laden (.onnx)</label><input type="file" id="yolo-model" accept=".onnx" hidden>
+                    <label class="cam-toggle-label"><input type="checkbox" id="yolo-on"> YOLO-Ebene aktiv</label>
+                    <label>Klassennamen (Komma, in Modellreihenfolge)<input type="text" id="yolo-classes" value="dart"></label>
+                    <label>Punkte pro Dart<select id="yolo-kpts"><option value="2">2 Punkte: Spitze + Flight (Pose)</option><option value="0">keine (nur Boxen)</option></select></label>
+                    <label>Schwelle <span id="yolo-conf-val">0.35</span><input type="range" id="yolo-conf" min="0.1" max="0.9" step="0.05" value="0.35"></label>
+                    <div class="ref-meta-text" id="ds-count">Datensatz: 0 Bilder</div>
+                    <button class="btn-action" id="ds-export" type="button">Datensatz exportieren (ZIP)</button>
+                    <button class="btn-action" id="ds-clear" type="button">Datensatz leeren</button>
+                    <div class="ref-meta-text" id="yolo-status">Kein Modell geladen</div>
+                </div>
+            </details>
+            <details class="advanced-options">
                 <summary>Erweiterte Anzeige- und Erkennungsoptionen</summary>
                 <button class="btn-action" id="btn-grid" type="button">Kalibrierungsraster ein-/ausblenden</button>
             </details>
@@ -780,8 +804,44 @@ class Homography {
     return out.every(r => r.every(Number.isFinite)) ? out : null;
   }
 
+  // Nichtlineare Verfeinerung (Levenberg-Marquardt): minimiert den geometrischen Fehler statt des algebraischen DLT-Fehlers
+  static refine(H0, src, dst, iters = 25) {
+    const cost = H => { let c = 0; for (let i = 0; i < src.length; i++) { const q = Homography.apply(H, src[i].x, src[i].y); c += (q.x - dst[i].x) ** 2 + (q.y - dst[i].y) ** 2; } return c; };
+    const toH = p => [[p[0], p[1], p[2]], [p[3], p[4], p[5]], [p[6], p[7], 1]];
+    let p = [].concat(...H0).slice(0, 8), c = cost(toH(p)), lam = 1e-3;
+    if (!isFinite(c)) return H0;
+    for (let it = 0; it < iters; it++) {
+      const JTJ = Array.from({ length: 8 }, () => new Array(8).fill(0)), JTr = new Array(8).fill(0);
+      for (let i = 0; i < src.length; i++) {
+        const { x, y } = src[i], w = p[6] * x + p[7] * y + 1, u = p[0] * x + p[1] * y + p[2], v = p[3] * x + p[4] * y + p[5];
+        const rows = [[x / w, y / w, 1 / w, 0, 0, 0, -u * x / (w * w), -u * y / (w * w), u / w - dst[i].x], [0, 0, 0, x / w, y / w, 1 / w, -v * x / (w * w), -v * y / (w * w), v / w - dst[i].y]];
+        for (const r of rows) for (let a = 0; a < 8; a++) { JTr[a] += r[a] * r[8]; for (let b = 0; b < 8; b++) JTJ[a][b] += r[a] * r[b]; }
+      }
+      let improved = false;
+      for (let tries = 0; tries < 6 && !improved; tries++) {
+        const A = JTJ.map((r, a) => r.map((v, b) => v + (a === b ? lam * (JTJ[a][a] + 1e-9) : 0))), bvec = JTr.map(v => -v);
+        for (let k = 0; k < 8; k++) { // Gauss-Elimination
+          let m = k; for (let r = k + 1; r < 8; r++) if (Math.abs(A[r][k]) > Math.abs(A[m][k])) m = r;
+          [A[k], A[m]] = [A[m], A[k]]; [bvec[k], bvec[m]] = [bvec[m], bvec[k]];
+          if (Math.abs(A[k][k]) < 1e-18) break;
+          for (let r = k + 1; r < 8; r++) { const f = A[r][k] / A[k][k]; for (let cc = k; cc < 8; cc++) A[r][cc] -= f * A[k][cc]; bvec[r] -= f * bvec[k]; }
+        }
+        const d = new Array(8).fill(0);
+        for (let k = 7; k >= 0; k--) { let acc = bvec[k]; for (let cc = k + 1; cc < 8; cc++) acc -= A[k][cc] * d[cc]; d[k] = Math.abs(A[k][k]) < 1e-18 ? 0 : acc / A[k][k]; }
+        const pn = p.map((v, k) => v + d[k]), cn = cost(toH(pn));
+        if (isFinite(cn) && cn < c) { p = pn; c = cn; lam = Math.max(lam / 3, 1e-9); improved = true; } else lam *= 5;
+      }
+      if (!improved) break;
+    }
+    return toH(p);
+  }
+
   static evaluate(src, dst, idx) {
-    const H = Homography.solveLeastSquares(idx.map(i => src[i]), idx.map(i => dst[i]));
+    let H = Homography.solveLeastSquares(idx.map(i => src[i]), idx.map(i => dst[i]));
+    if (H) { // Rauschen liegt in den Kamerapunkten: im Kamerabild (Brett -> Kamera) verfeinern, dann zurückinvertieren
+      const G0 = Homography.invert(H);
+      if (G0) { const G = Homography.refine(G0.map(r => r.map(v => v / G0[2][2])), idx.map(i => dst[i]), idx.map(i => src[i])), Hn = Homography.invert(G); if (Hn && Hn.every(r => r.every(Number.isFinite))) H = Hn.map(r => r.map(v => v / Hn[2][2])); }
+    }
     if (!H || !Homography.invert(H)) return null;
     const ws = idx.map(i => H[2][0] * src[i].x + H[2][1] * src[i].y + H[2][2]);
     if (!(ws.every(w => w > 0) || ws.every(w => w < 0))) return null;
@@ -1626,11 +1686,22 @@ class MotionDetector {
   }
 
   diff(a, b, { includeMask = true } = {}) {
-    const m = includeMask ? new Uint8Array(a.length) : null; let n = 0;
-    const threshold = this.cfg.pixelThreshold;
-    for (let i = 0; i < a.length; i++) if ((!this.roi || this.roi[i]) && Math.abs(a[i] - b[i]) > threshold) { if (m) m[i] = 1; n++; }
-    this.lastDiffMetrics = { threshold };
-    return { mask: m, count: n, ratio: n / (this.roiCount || a.length) };
+    const N = a.length, roi = this.roi, step = Math.max(1, (N / 6000) | 0), hist = new Uint32Array(511);
+    let cnt = 0;
+    for (let i = 0; i < N; i += step) if (!roi || roi[i]) { hist[a[i] - b[i] + 255]++; cnt++; }
+    // 1) Globaler Helligkeitsausgleich: Median der Differenz (robust, der Dart selbst ist zu klein um ihn zu verschieben)
+    let med = 0, acc = 0;
+    for (let k = 0; k < 511; k++) { acc += hist[k]; if (acc * 2 >= cnt) { med = k - 255; break; } }
+    // 2) Adaptive Schwelle: Rauschen über die mediane absolute Abweichung (MAD) schätzen
+    const mh = new Uint32Array(256);
+    for (let k = 0; k < 511; k++) mh[Math.min(255, Math.abs(k - 255 - med))] += hist[k];
+    let mad = 0; acc = 0;
+    for (let k = 0; k < 256; k++) { acc += mh[k]; if (acc * 2 >= cnt) { mad = k; break; } }
+    const base = this.cfg.pixelThreshold, threshold = Math.min(base * 2.5, Math.max(base, Math.ceil(4.5 * 1.4826 * mad)));
+    const m = includeMask ? new Uint8Array(N) : null; let n = 0;
+    for (let i = 0; i < N; i++) if ((!roi || roi[i]) && Math.abs(a[i] - b[i] - med) > threshold) { if (m) m[i] = 1; n++; }
+    this.lastDiffMetrics = { threshold, brightnessShift: med, noiseMad: mad };
+    return { mask: m, count: n, ratio: n / (this.roiCount || N) };
   }
 
   blobs(mask) {
@@ -1684,43 +1755,6 @@ class DartLocator {
     if (!nd || !nd.f) return null;
     const estimatedMm = (nd.f * 170) / (BOARD.rOuter * 0.95); 
     return Math.round(estimatedMm / 10); // in cm
-  }
-
-
-  // Subpixel-Korrektur: Intensitätsprofil quer zur Dartachse auswerten und
-  // den stärksten Übergang (Board-Hintergrund -> Dart-Silhouette) parabolisch interpolieren.
-  static refineTipSubpixel(ref, cur, w, h, tip, axis) {
-    if (!axis || !Number.isFinite(axis.x) || !Number.isFinite(axis.y)) return tip;
-    const L = Math.hypot(axis.x, axis.y) || 1, ux = axis.x / L, uy = axis.y / L;
-    const vx = -uy, vy = ux, step = 0.5, profiles = [];
-    const sample = (a, x, y) => {
-      if (x < 0 || y < 0 || x >= w - 1 || y >= h - 1) return 0;
-      const x0 = Math.floor(x), y0 = Math.floor(y), fx = x - x0, fy = y - y0;
-      const i = y0 * w + x0;
-      return (a[i] * (1 - fx) * (1 - fy) + a[i + 1] * fx * (1 - fy) +
-        a[i + w] * (1 - fx) * fy + a[i + w + 1] * fx * fy);
-    };
-    for (let k = -6; k <= 16; k++) {
-      const t = k * step; let sum = 0, n = 0;
-      for (let q = -3; q <= 3; q++) {
-        const x = tip.x + ux * t + vx * q, y = tip.y + uy * t + vy * q;
-        sum += Math.abs(sample(cur, x, y) - sample(ref, x, y)); n++;
-      }
-      profiles.push(sum / n);
-    }
-    const grad = [];
-    for (let i = 1; i < profiles.length; i++) grad.push(Math.abs(profiles[i] - profiles[i - 1]));
-    let peak = 0;
-    for (let i = 1; i < grad.length; i++) if (grad[i] > grad[peak]) peak = i;
-    let delta = 0;
-    if (peak > 0 && peak < grad.length - 1) {
-      const a = grad[peak - 1], b = grad[peak], c = grad[peak + 1], den = a - 2 * b + c;
-      if (Math.abs(den) > 1e-6) delta = Math.max(-0.75, Math.min(0.75, 0.5 * (a - c) / den));
-    }
-    const offset = (-6 + peak + 0.5 + delta) * step;
-    // Nur kleine Korrekturen zulassen, damit Reflexe nicht den Dart-Endpunkt verschieben.
-    const correction = Math.max(-2.5, Math.min(2.5, offset));
-    return { x: tip.x + ux * correction, y: tip.y + uy * correction };
   }
 
   static analyze(ref, cur, w, h, box, opts = {}) {
@@ -1990,13 +2024,118 @@ class ScoreFeedback {
   destroy() { clearTimeout(this.timer); this.queue = []; this.root.remove(); }
 }
 
+// ===== Datensatz: Frames im Browser sammeln (IndexedDB) und als YOLO-Ordner-ZIP exportieren =====
+const Dataset = {
+  open() { return new Promise((ok, fail) => { const r = indexedDB.open('autodarts-dataset', 1); r.onupgradeneeded = () => r.result.createObjectStore('frames', { keyPath: 'id', autoIncrement: true }); r.onsuccess = () => ok(r.result); r.onerror = () => fail(r.error); }); },
+  async tx(mode, fn) { const db = await this.open(); return new Promise((ok, fail) => { const t = db.transaction('frames', mode), req = fn(t.objectStore('frames')); t.oncomplete = () => { db.close(); ok(req.result); }; t.onerror = () => fail(t.error); }); },
+  add(blob) { return this.tx('readwrite', st => st.add({ blob, t: Date.now() })); },
+  count() { return this.tx('readonly', st => st.count()); },
+  all() { return this.tx('readonly', st => st.getAll()); },
+  clear() { return this.tx('readwrite', st => st.clear()); },
+  crc(u) { if (!this.tbl) { this.tbl = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; this.tbl[n] = c >>> 0; } } let c = ~0; for (let i = 0; i < u.length; i++) c = this.tbl[(c ^ u[i]) & 255] ^ (c >>> 8); return ~c >>> 0; },
+  zip(files) { // ohne Kompression (JPEGs sind schon komprimiert)
+    const enc = new TextEncoder(), parts = [], cd = []; let off = 0;
+    for (const f of files) {
+      const nm = enc.encode(f.name), crc = this.crc(f.data), sz = f.data.length;
+      const lh = new DataView(new ArrayBuffer(30)); lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true); lh.setUint16(12, 0x21, true); lh.setUint32(14, crc, true); lh.setUint32(18, sz, true); lh.setUint32(22, sz, true); lh.setUint16(26, nm.length, true);
+      parts.push(lh.buffer, nm, f.data);
+      const ch = new DataView(new ArrayBuffer(46)); ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(8, 0x0800, true); ch.setUint16(14, 0x21, true); ch.setUint32(16, crc, true); ch.setUint32(20, sz, true); ch.setUint32(24, sz, true); ch.setUint16(28, nm.length, true); ch.setUint32(42, off, true);
+      cd.push(ch.buffer, nm); off += 30 + nm.length + sz;
+    }
+    const cdSize = cd.reduce((a, b) => a + b.byteLength, 0), end = new DataView(new ArrayBuffer(22));
+    end.setUint32(0, 0x06054b50, true); end.setUint16(8, files.length, true); end.setUint16(10, files.length, true); end.setUint32(12, cdSize, true); end.setUint32(16, off, true);
+    return new Blob([...parts, ...cd, end.buffer], { type: 'application/zip' });
+  },
+  async exportZip() {
+    const rows = await this.all(), files = [];
+    for (let i = 0; i < rows.length; i++) files.push({ name: `datasets/darts/images/${i % 5 === 4 ? 'val' : 'train'}/frame_${String(i + 1).padStart(4, '0')}.jpg`, data: new Uint8Array(await rows[i].blob.arrayBuffer()) });
+    files.push({ name: 'datasets/darts/data.yaml', data: new TextEncoder().encode('path: .\ntrain: images/train\nval: images/val\nnames:\n  0: dart\n') });
+    return this.zip(files);
+  }
+};
+
+// ===== YOLO-Ebene (optional): ONNX-Modell im Browser, YOLOv8/11-Ausgabeformat =====
+const YOLO = {
+  session: null, on: false, busy: false, size: 640, conf: 0.35, names: ['dart'], kpts: 2, ready() { return !!this.session; }, cvs: document.createElement('canvas'),
+  ortUrl: 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/',
+  async ensureOrt() {
+    if (window.ort) return;
+    await new Promise((ok, fail) => { const sc = document.createElement('script'); sc.src = this.ortUrl + 'ort.min.js'; sc.onload = ok; sc.onerror = () => fail(new Error('onnxruntime-web nicht ladbar (Internet?)')); document.head.append(sc); });
+    ort.env.wasm.wasmPaths = this.ortUrl;
+  },
+  async load(buf) {
+    await this.ensureOrt();
+    this.session = await ort.InferenceSession.create(buf, { executionProviders: ['wasm'] });
+    const d = this.session.inputMetadata?.[this.session.inputNames[0]]?.shape?.[2];
+    this.size = (typeof d === 'number' && d > 0) ? d : 640;
+  },
+  iou(a, b) { const x1 = Math.max(a.x, b.x), y1 = Math.max(a.y, b.y), x2 = Math.min(a.x + a.w, b.x + b.w), y2 = Math.min(a.y + a.h, b.y + b.h), i = Math.max(0, x2 - x1) * Math.max(0, y2 - y1); return i / (a.w * a.h + b.w * b.h - i || 1); },
+  nms(list) { list.sort((p, q) => q.conf - p.conf); const keep = []; for (const c of list) if (keep.every(k => this.iou(k, c) < 0.45)) keep.push(c); return keep; },
+  decode(t, k, px, py) {
+    const dm = t.dims, a = t.data, tr = dm[1] > dm[2], N = tr ? dm[1] : dm[2], C = tr ? dm[2] : dm[1], K = this.kpts | 0, nc = K ? C - 4 - 3 * K : Math.min(this.names.length || C - 4, C - 4), out = [];
+    const at = (i, c) => tr ? a[i * C + c] : a[c * N + i];
+    for (let i = 0; i < N; i++) {
+      let best = 0, cls = 0;
+      for (let c = 0; c < nc; c++) { const v = at(i, 4 + c); if (v > best) { best = v; cls = c; } }
+      if (best < this.conf) continue;
+      const w = at(i, 2), h = at(i, 3);
+      const kp = j => ({ x: (at(i, 4 + nc + 3 * j) - px) / k, y: (at(i, 5 + nc + 3 * j) - py) / k, c: at(i, 6 + nc + 3 * j) });
+      out.push({ x: (at(i, 0) - w / 2 - px) / k, y: (at(i, 1) - h / 2 - py) / k, w: w / k, h: h / k, conf: best, cls, tip: K >= 1 ? kp(0) : null, flight: K >= 2 ? kp(1) : null });
+    }
+    return this.nms(out).map(b => ({ ...b, name: this.names[b.cls] || String(b.cls) }));
+  },
+  async detect(media) {
+    const S = this.size, W = media.videoWidth || media.naturalWidth, H = media.videoHeight || media.naturalHeight;
+    if (!W || !H) return [];
+    this.cvs.width = this.cvs.height = S;
+    const g = this.cvs.getContext('2d', { willReadFrequently: true }), k = Math.min(S / W, S / H), px = (S - W * k) / 2, py = (S - H * k) / 2;
+    g.fillStyle = '#727272'; g.fillRect(0, 0, S, S); g.drawImage(media, px, py, W * k, H * k);
+    const d = g.getImageData(0, 0, S, S).data, n = S * S, f = new Float32Array(3 * n);
+    for (let i = 0; i < n; i++) { f[i] = d[4 * i] / 255; f[n + i] = d[4 * i + 1] / 255; f[2 * n + i] = d[4 * i + 2] / 255; }
+    const res = await this.session.run({ [this.session.inputNames[0]]: new ort.Tensor('float32', f, [1, 3, S, S]) });
+    return this.decode(res[this.session.outputNames[0]], k, px, py);
+  }
+};
+
+// ===== Ultralytics Platform: gesammelte Frames als ZIP in den Datensatz hochladen =====
+const ULTRA = {
+  api: 'https://platform.ultralytics.com/api', q: [], timer: null, delay: 5000,
+  cfg() { try { return JSON.parse(localStorage.getItem('autodarts_ultra') || '{}'); } catch (_) { return {}; } },
+  say(t) { const e = document.getElementById('ultra-status'); if (e) e.textContent = t; },
+  enqueue(blob) {
+    this.q.push({ name: `autodarts-${Date.now()}-${this.q.length}.jpg`, blob });
+    this.say(`${this.q.length} Frame(s) in der Warteschlange – Upload startet gleich …`);
+    clearTimeout(this.timer); this.timer = setTimeout(() => this.flush(), this.delay);
+  },
+  async flush() {
+    const items = this.q.splice(0); if (!items.length) return;
+    const c = this.cfg(), [owner, slug] = (c.dataset || '').split('/'), H = { Authorization: 'Bearer ' + (c.key || '') }, J = { ...H, 'Content-Type': 'application/json' };
+    const ok = async (r, what) => { if (!r.ok) throw new Error(`${what}: HTTP ${r.status}`); return r.json(); };
+    let zip;
+    try {
+      this.say(`Lade ${items.length} Frame(s) hoch …`);
+      zip = Dataset.zip(await Promise.all(items.map(async i => ({ name: i.name, data: new Uint8Array(await i.blob.arrayBuffer()) }))));
+      const ds = await ok(await fetch(`${this.api}/datasets/${owner}/${slug}`, { headers: H }), 'Datensatz');
+      const up = await ok(await fetch(`${this.api}/upload/signed-url`, { method: 'POST', headers: J, body: JSON.stringify({ assetType: 'datasets', assetId: ds.dataset?.id || ds.id, filename: 'frames.zip', contentType: 'application/zip', totalBytes: zip.size }) }), 'Upload-URL');
+      const put = await fetch(up.uploadUrl, { method: 'PUT', headers: { 'Content-Type': 'application/zip', ...(up.headers || {}) }, body: zip });
+      if (!put.ok) throw new Error('Hochladen: HTTP ' + put.status);
+      await ok(await fetch(`${this.api}/upload/complete`, { method: 'POST', headers: J, body: JSON.stringify({ sessionId: up.sessionId }) }), 'Abschluss');
+      await ok(await fetch(`${this.api}/datasets/${owner}/${slug}/ingest`, { method: 'POST', headers: J, body: JSON.stringify({ sessionId: up.sessionId, targetSplit: c.split || 'train', conflictPolicy: 'keep_both' }) }), 'Import');
+      this.say(`${items.length} Frame(s) an ${owner}/${slug} gesendet (${c.split || 'train'}).`);
+    } catch (err) { // Fallback: ZIP lokal speichern (die Frames liegen außerdem im lokalen Datensatz)
+      this.say('Upload fehlgeschlagen (' + err.message + ') – ZIP lokal gespeichert, bitte manuell hochladen.');
+      const a = document.createElement('a'); a.href = URL.createObjectURL(zip || Dataset.zip([])); a.download = `autodarts-frames-${Math.floor(Date.now() / 1000)}.zip`;
+      document.body.append(a); a.click(); a.remove();
+    }
+  }
+};
+
 class AutoDartsEngine {
   constructor(opts = {}) {
     this.cfg = merge(DEFAULTS, opts);
     if (!this.cfg.container) throw new Error('AutoDartsEngine: "container" fehlt');
     this.listeners = {};
     this.H = null; this.Hinv = null; this.camSize = null;
-    this.distortion = { k1: 0, k2: 0 };
     this.state = 'idle'; this.still = 0; this.prev = null; this.reference = null; this.timer = null;
     this.isVideoFileMode = false; this.isScreenshotMode = false; this.activeMedia = null; this.lsKey = LS_KEY;
     this.overlayResizeObserver = null;
@@ -2004,15 +2143,6 @@ class AutoDartsEngine {
     this.refDescription = { type: 'none', text: 'Kein Referenzbild aktiv', meta: 'Warte auf Kamerabild & Kalibrierung', updatedAt: null };
     this.motion = new MotionDetector(this.cfg.motion);
     this.tip = new TipLocator(this.cfg.tip);
-  }
-
-
-  // Radiale Entzerrung in normierten Bildkoordinaten; Mittelpunkt = Bildzentrum.
-  undistortPoint(x, y) {
-    const w = this.camSize?.w || 1, h = this.camSize?.h || 1, scale = Math.max(w, h);
-    const cx = w / 2, cy = h / 2, dx = (x - cx) / scale, dy = (y - cy) / scale;
-    const r2 = dx * dx + dy * dy, f = 1 + this.distortion.k1 * r2 + this.distortion.k2 * r2 * r2;
-    return { x: cx + dx * f * scale, y: cy + dy * f * scale };
   }
 
   get media() { return this.isScreenshotMode ? this.activeMedia : this.video; }
@@ -2122,7 +2252,7 @@ class AutoDartsEngine {
     const x = (e.clientX - hostRect.left - view.left) * this.camSize.w / view.width;
     const y = (e.clientY - hostRect.top - view.top) * this.camSize.h / view.height;
     if (x < 0 || y < 0 || x > this.camSize.w || y > this.camSize.h) return;
-    const b = Homography.apply(this.H, this.undistortPoint(x, y)), res = Scoring.fromBoard(b.x, b.y, this.cfg.radii);
+    const b = Homography.apply(this.H, x, y), res = Scoring.fromBoard(b.x, b.y, this.cfg.radii);
     this.shotPoint = { x, y, label: res.label }; this.drawMarks();
     this.setStatus(`Tipp: ${res.label} (${res.points} Punkte)`);
     this.emit('photo-click', res);
@@ -2132,7 +2262,6 @@ class AutoDartsEngine {
     try {
       const raw = JSON.parse(localStorage.getItem(this.lsKey) || 'null');
       if (!raw || !raw.matrix) return;
-      if (raw.distortion) this.distortion = { k1: Number(raw.distortion.k1) || 0, k2: Number(raw.distortion.k2) || 0 };
       let H = raw.matrix;
       if (raw.width && this.camSize && (raw.width !== this.camSize.w || raw.height !== this.camSize.h)) {
         H = Homography.rescaleSource(H, raw.width / this.camSize.w, raw.height / this.camSize.h);
@@ -2170,15 +2299,14 @@ class AutoDartsEngine {
       return false;
     }
 
-    const correctedPts = pts.map(p => this.undistortPoint(p.x, p.y));
-    const fit = Homography.fit(correctedPts, CALIB_TARGETS);
+    const fit = Homography.fit(pts, CALIB_TARGETS);
     if (!fit || fit.rms > 3) {
       this.setStatus(fit ? `Kalibrierung ungenau` : 'Kalibrierung ungültig');
       return false;
     }
     const H = fit.H;
     this.applyHomography(H);
-    localStorage.setItem(this.lsKey, JSON.stringify({ matrix: H, distortion: this.distortion, width: this.camSize.w, height: this.camSize.h, method: `${ANCHOR_COUNT}-pt`, savedAt: Date.now() }));
+    localStorage.setItem(this.lsKey, JSON.stringify({ matrix: H, width: this.camSize.w, height: this.camSize.h, method: `${ANCHOR_COUNT}-pt`, savedAt: Date.now() }));
     
     // Berechne Kamera-Entfernung für Statusanzeige
     const distCm = DartLocator.estimateCameraDistance(H, this.camSize.w, this.camSize.h);
@@ -2243,6 +2371,13 @@ class AutoDartsEngine {
     if (!this.camSize) return;
     const c = this.ensureMarks(), g = c.getContext('2d'), o = this.cfg.marks, s = Math.max(1, c.width / 640);
     g.clearRect(0, 0, c.width, c.height);
+    if (YOLO.on && this.yoloBoxes && performance.now() - this.yoloBoxes.t < 2000) {
+      g.lineWidth = 2 * s; g.font = `600 ${12 * s}px system-ui`;
+      for (const b of this.yoloBoxes.boxes) { g.strokeStyle = g.fillStyle = /flight/i.test(b.name) ? '#fb923c' : '#22d3ee'; g.strokeRect(b.x, b.y, b.w, b.h); g.fillText(`${b.name} ${Math.round(b.conf * 100)}%`, b.x, Math.max(12 * s, b.y - 4 * s));
+        if (b.tip && b.flight) { g.strokeStyle = '#fb923c'; g.beginPath(); g.moveTo(b.tip.x, b.tip.y); g.lineTo(b.flight.x, b.flight.y); g.stroke(); }
+        if (b.flight) { g.fillStyle = '#fb923c'; g.beginPath(); g.arc(b.flight.x, b.flight.y, 5 * s, 0, 7); g.fill(); }
+        if (b.tip) { g.fillStyle = '#22d3ee'; g.beginPath(); g.arc(b.tip.x, b.tip.y, 5 * s, 0, 7); g.fill(); } }
+    }
     const label = (txt, x, y, col) => { g.font = `700 ${16 * s}px system-ui`; g.lineWidth = 3.5 * s; g.strokeStyle = 'rgba(0,0,0,.85)'; g.strokeText(txt, x, y); g.fillStyle = col; g.fillText(txt, x, y); };
     this.turnDarts.forEach(d => {
       if (o.flight && d.flight) {
@@ -2341,19 +2476,28 @@ class AutoDartsEngine {
     return { box: { x0: (x0 - mg) * sx, y0: (y0 - mg) * sy, x1: (x1 + 1 + mg) * sx, y1: (y1 + 1 + mg) * sy }, seed: { x: (cx / blob.length + .5) * sx, y: (cy / blob.length + .5) * sy } };
   }
 
+  yoloAssist(loc) {
+    const yb = this.yoloBoxes;
+    if (!YOLO.on || !YOLO.ready() || !yb || performance.now() - yb.t > 1500) return;
+    const pts = yb.boxes.filter(b => b.tip);
+    let hit;
+    if (pts.length) hit = pts.find(b => Math.hypot(loc.tip.x - b.tip.x, loc.tip.y - b.tip.y) <= Math.max(14, 0.2 * Math.hypot(b.w, b.h))); // Pose: Spitzenpunkt vergleichen
+    else hit = yb.boxes.find(b => loc.tip.x >= b.x - b.w * 0.2 && loc.tip.x <= b.x + b.w * 1.2 && loc.tip.y >= b.y - b.h * 0.2 && loc.tip.y <= b.y + b.h * 1.2);
+    if (hit) { loc.unsure = false; loc.conf = Math.max(loc.conf, hit.conf); loc.yolo = 'bestätigt'; }
+    else { loc.unsure = true; loc.yolo = 'nicht bestätigt'; }
+  }
+
   locateDart(blob, cur) {
     const ref = this.refFull;
     if (ref && ref.w === cur.w && ref.h === cur.h) {
       const { box, seed } = this.blobBox(blob, cur), sc = cur.w / this.camSize.w;
       const Hs = this.Hinv.map((r, i) => (i < 2 ? r.map(v => v * sc) : r.slice()));
-      const bs = Homography.apply(this.H, this.undistortPoint(seed.x / sc, seed.y / sc));
+      const bs = Homography.apply(this.H, seed.x / sc, seed.y / sc);
       const nd = DartLocator.normalDirection(Hs, cur.w, cur.h, bs.x, bs.y);
       const r = DartLocator.analyze(ref.g, cur.g, cur.w, cur.h, box, { seed, center: Homography.apply(Hs, BOARD.cx, BOARD.cy), normalDir: nd });
       if (r) {
         const frontal = !!nd && nd.ang < 20;
-        const refinedTip = DartLocator.refineTipSubpixel(ref.g, cur.g, cur.w, cur.h,
-          { x: r.tip.x, y: r.tip.y }, r.axis || { x: r.flight.x - r.tip.x, y: r.flight.y - r.tip.y });
-        return { tip: { x: refinedTip.x / sc, y: refinedTip.y / sc }, flight: { x: r.flight.x / sc, y: r.flight.y / sc }, conf: r.conf, unsure: r.conf < 0.5 || r.compact || frontal, frontal, D: nd ? nd.ang : 0, cameraSide: nd?.cameraSide || 'unknown', cameraBoardX: nd?.cameraBoardX ?? null, ext: r.elong, source: nd ? 'full-pose-axis' : 'full-axis' };
+        return { tip: { x: r.tip.x / sc, y: r.tip.y / sc }, flight: { x: r.flight.x / sc, y: r.flight.y / sc }, conf: r.conf, unsure: r.conf < 0.5 || r.compact || frontal, frontal, D: nd ? nd.ang : 0, cameraSide: nd?.cameraSide || 'unknown', cameraBoardX: nd?.cameraBoardX ?? null, ext: r.elong, source: nd ? 'full-pose-axis' : 'full-axis' };
       }
     }
     const center = Homography.apply(this.Hinv, BOARD.cx, BOARD.cy);
@@ -2468,47 +2612,19 @@ class AutoDartsEngine {
       this.reference = g; this.refFull = cur; this.state = 'armed'; this.setStatus('Aufnahme beendet'); return;
     }
 
-    // Fünf ruhige Frames auswerten; Ausreißer werden über die Medianposition verworfen.
-    const stableFrames = [cur];
-    for (let i = 0; i < 4; i++) {
-      await new Promise(resolve => setTimeout(resolve, 45));
-      if (this.video.readyState >= 2) stableFrames.push(this.motion.grabFull(this.video));
-    }
-    const frameLocs = stableFrames.map(frame => this.locateDart(blobs[0], frame)).filter(Boolean);
-    let loc = null;
-    if (frameLocs.length) {
-      const median = key => {
-        const a = frameLocs.map(v => v.tip[key]).sort((x, y) => x - y);
-        return a[Math.floor(a.length / 2)];
-      };
-      const mx = median('x'), my = median('y');
-      const deviations = frameLocs.map(v => Math.hypot(v.tip.x - mx, v.tip.y - my)).sort((a, b) => a - b);
-      const mad = deviations[Math.floor(deviations.length / 2)] || 0;
-      const accepted = frameLocs.filter(v => Math.hypot(v.tip.x - mx, v.tip.y - my) <= Math.max(3, 3 * mad));
-      const weighted = accepted.length ? accepted : [frameLocs[0]];
-      const weight = v => Math.max(0.15, Number(v.conf) || 0.15);
-      const totalWeight = weighted.reduce((sum, v) => sum + weight(v), 0);
-      const avg = key => weighted.reduce((sum, v) => sum + v.tip[key] * weight(v), 0) / totalWeight;
-      loc = { ...weighted[0], tip: { x: avg('x'), y: avg('y') },
-        conf: weighted.reduce((sum, v) => sum + (Number(v.conf) || 0) * weight(v), 0) / totalWeight,
-        unsure: weighted.length < 3 || weighted.some(v => v.unsure) };
-      const flights = weighted.filter(v => v.flight);
-      if (flights.length) loc.flight = {
-        x: flights.reduce((sum, v) => sum + v.flight.x, 0) / flights.length,
-        y: flights.reduce((sum, v) => sum + v.flight.y, 0) / flights.length
-      };
-    }
+    const loc = this.locateDart(blobs[0], cur);
     if (!loc) {
       this.reference = g; this.refFull = cur; this.state = 'armed';
       this.setStatus('Bereit (Objekt gefiltert)'); return;
     }
 
-    const b = Homography.apply(this.H, this.undistortPoint(loc.tip.x, loc.tip.y));
+    const b = Homography.apply(this.H, loc.tip.x, loc.tip.y);
     const res = Scoring.fromBoard(b.x, b.y, this.cfg.radii);
 
     this.reference = g.slice(); this.refFull = cur; this.state = 'armed';
     if (!isFinite(res.board.r) || res.board.r > m.maxScoreRadius) { this.setStatus('Bereit'); this.emit('detect-failed', { tip: loc.tip }); return; }
 
+    this.yoloAssist(loc);
     const dart = { id: ++this.dartSeq, tip: loc.tip, flight: loc.flight, label: res.label, unsure: loc.unsure, conf: loc.conf };
     Object.assign(res, { cam: { x: loc.tip.x, y: loc.tip.y }, flight: loc.flight, confidence: loc.conf, source: loc.source, unsure: loc.unsure, dartId: dart.id, D: loc.D, cameraSide: loc.cameraSide || 'unknown', cameraBoardX: loc.cameraBoardX ?? null, ext: loc.ext });
     this.turnDarts.push(dart); this.drawMarks();
@@ -2672,36 +2788,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     const dot = $('status-dot'), statusEl = $('calibration-status'), list = $('throw-list'), totalEl = $('throw-total');
     let total = 0, gridOn = true, turnSum = 0;
 
-    const fusionWindowMs = 850, pendingCameraHits = [];
-    const commitScoredHit = (r, cam) => {
+    const onScoredHit = (r, cam) => {
         total += r.points; turnSum += r.points; totalEl.textContent = total;
         const row = document.createElement('div'); row.className = 'throw-row';
         const pct = r.confidence != null ? Math.round(Math.min(1, Math.max(0, r.confidence)) * 100) : null;
         const sure = pct != null ? ` <small style="color:${pct >= 80 ? '#00ff88' : pct >= 50 ? '#ffd43b' : '#ff6b6b'}">· ${pct} % sicher</small>` : '';
-        const view = r.viewAgreementMm != null ? ` <small>(Kamerafusion · Δ ${r.viewAgreementMm.toFixed(1)} mm)</small>` : '';
+        const view = r.viewAgreementMm != null ? ` <small>(2 Ansichten · Δ ${r.viewAgreementMm.toFixed(1)} mm)</small>` : '';
         row.innerHTML = `<span><small>${cam}</small> ${r.label}${r.corrected ? ' <small>(korrigiert)</small>' : ''}${sure}${view}</span><span>${r.points}</span>`;
         list.prepend(row);
-    };
-    const onScoredHit = (r, cam) => {
-        const multi = secondCamEnabled || thirdCamEnabled;
-        if (!multi || !r.board) { commitScoredHit(r, cam); return; }
-        const now = performance.now();
-        const match = pendingCameraHits.find(p => p.cam !== cam && now - p.t <= fusionWindowMs &&
-            p.r.board && Math.hypot(p.r.board.x - r.board.x, p.r.board.y - r.board.y) <= 8);
-        if (match) {
-            clearTimeout(match.timer);
-            const delta = Math.hypot(match.r.board.x - r.board.x, match.r.board.y - r.board.y);
-            const best = (Number(r.confidence) || 0) > (Number(match.r.confidence) || 0) ? r : match.r;
-            commitScoredHit({ ...best, viewAgreementMm: delta }, `${match.cam} + ${cam}`);
-            pendingCameraHits.splice(pendingCameraHits.indexOf(match), 1);
-            return;
-        }
-        const entry = { r, cam, t: now, timer: null };
-        entry.timer = setTimeout(() => {
-            const i = pendingCameraHits.indexOf(entry);
-            if (i >= 0) { pendingCameraHits.splice(i, 1); commitScoredHit(entry.r, entry.cam); }
-        }, fusionWindowMs);
-        pendingCameraHits.push(entry);
     };
 
     const engine = new AutoDartsEngine({ container: $('camera-wrapper-left'), statusHost: $('cal-status-left'), panelHost: $('cal-panel-left'), video: $('webcam'), onHit: r => onScoredHit(r, 'Kamera 1') });
@@ -2716,21 +2810,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     thirdEngine.lsKey = LS_KEY + '_third';
     window.dartThirdEngine = thirdEngine;
     await thirdEngine.start();
-
-    const lensK1 = $('lens-k1');
-    const applyLensK1 = () => {
-        const k1 = Number(lensK1.value);
-        $('lens-k1-value').textContent = k1.toFixed(3);
-        for (const e of [engine, rightEngine, thirdEngine]) e.distortion = { k1, k2: 0 };
-        const calibrated = [engine, rightEngine, thirdEngine].some(e => !!e.H);
-        if (calibrated) statusEl.textContent = 'Objektivkorrektur geändert · bitte Kameras neu kalibrieren';
-    };
-    bindEvent(lensK1, 'input', applyLensK1);
-    try {
-        const saved = JSON.parse(localStorage.getItem(LS_KEY) || 'null');
-        if (saved?.distortion && Number.isFinite(saved.distortion.k1)) lensK1.value = String(saved.distortion.k1);
-    } catch (_) {}
-    applyLensK1();
 
     const bindReferencePanel = (side, targetEngine) => {
         const textEl = $(`ref-text-${side}`);
@@ -2761,6 +2840,53 @@ document.addEventListener('DOMContentLoaded', async () => {
         new MutationObserver(() => { if (panel.childElementCount && panel.parentElement.tagName === 'DETAILS') panel.parentElement.open = true; }).observe(panel, { childList: true });
     }
 
+    // Datensatz-Upload: Einstellungen speichern
+    {
+        const uc = ULTRA.cfg();
+        if (uc.dataset) $('ultra-dataset').value = uc.dataset; if (uc.key) $('ultra-key').value = uc.key; if (uc.split) $('ultra-split').value = uc.split; $('ultra-on').checked = !!uc.on;
+        const save = () => {
+            const v = { on: $('ultra-on').checked, dataset: $('ultra-dataset').value.trim().replace(/^.*datasets\//, ''), key: $('ultra-key').value.trim(), split: $('ultra-split').value };
+            try { localStorage.setItem('autodarts_ultra', JSON.stringify(v)); } catch (_) {}
+            ULTRA.say(v.on ? (v.key && v.dataset.includes('/') ? `Aktiv: Frames gehen an ${v.dataset} (${v.split})` : 'Bitte API-Key und Datensatz (Besitzer/Name) eintragen') : 'Aus: Frames werden nur lokal gesammelt');
+        };
+        ['ultra-on', 'ultra-dataset', 'ultra-key', 'ultra-split'].forEach(id => bindEvent(id, 'change', save)); save();
+    }
+
+    // YOLO-Ebene: Modell laden, Boxen je Kamera berechnen
+    const yoloStatus = $('yolo-status'), yoloEngines = [engine, rightEngine, thirdEngine];
+    try { const sv = JSON.parse(localStorage.getItem('autodarts_yolo') || '{}'); if (sv.classes) $('yolo-classes').value = sv.classes; if (sv.conf) $('yolo-conf').value = sv.conf; if (sv.kpts != null) $('yolo-kpts').value = sv.kpts; } catch (_) {}
+    const yoloApply = () => {
+        YOLO.conf = +$('yolo-conf').value; YOLO.kpts = +$('yolo-kpts').value; $('yolo-conf-val').textContent = YOLO.conf.toFixed(2);
+        YOLO.names = $('yolo-classes').value.split(',').map(x => x.trim()).filter(Boolean);
+        try { localStorage.setItem('autodarts_yolo', JSON.stringify({ classes: $('yolo-classes').value, conf: YOLO.conf, kpts: YOLO.kpts })); } catch (_) {}
+    };
+    bindEvent('yolo-conf', 'input', yoloApply); bindEvent('yolo-kpts', 'change', yoloApply); bindEvent('yolo-classes', 'input', yoloApply); yoloApply();
+    bindEvent('yolo-on', 'change', ev => {
+        if (ev.target.checked && !YOLO.ready()) { ev.target.checked = false; yoloStatus.textContent = 'Zuerst ein .onnx-Modell laden'; }
+        YOLO.on = ev.target.checked; yoloEngines.forEach(x => x.drawMarks());
+    });
+    bindEvent('yolo-model', 'change', async ev => {
+        const f = ev.target.files[0]; if (!f) return;
+        yoloStatus.textContent = 'Modell wird geladen …';
+        try { await YOLO.load(await f.arrayBuffer()); yoloStatus.textContent = `Modell bereit: ${f.name} (${YOLO.size}px)`; $('yolo-on').checked = YOLO.on = true; }
+        catch (err) { yoloStatus.textContent = 'Modell konnte nicht geladen werden: ' + err.message; }
+    });
+    setInterval(async () => {
+        if (!YOLO.on || YOLO.busy || document.hidden) return;
+        YOLO.busy = true;
+        try {
+            for (const e of yoloEngines) {
+                const v = e.video; if (!v || v.readyState < 2 || !v.offsetParent || !e.camSize) continue;
+                const boxes = await YOLO.detect(v), sx = e.camSize.w / (v.videoWidth || e.camSize.w), sy = e.camSize.h / (v.videoHeight || e.camSize.h);
+                e.yoloBoxes = { t: performance.now(), boxes: boxes.map(b => { const sc = q => q && { x: q.x * sx, y: q.y * sy, c: q.c }; return { ...b, x: b.x * sx, y: b.y * sy, w: b.w * sx, h: b.h * sy, tip: sc(b.tip), flight: sc(b.flight) }; }) };
+                e.drawMarks();
+            }
+        } catch (err) { YOLO.on = false; $('yolo-on').checked = false; yoloStatus.textContent = 'YOLO-Fehler: ' + err.message; }
+        YOLO.busy = false;
+    }, 300);
+
+    const fusionWindowMs = 850, fusionQueues = { left: [], right: [], third: [] };
+    let fusedTurnCount = 0;
     let secondCamEnabled = false;
 
     // Jede Kamera erkennt und bewertet einzeln (kein Abgleich zwischen Kameras).
@@ -2790,19 +2916,27 @@ document.addEventListener('DOMContentLoaded', async () => {
         vidEl.currentTime = (seekSlider.value / 100) * vidEl.duration;
     });
 
+    const dsCount = $('ds-count'), dsRefresh = () => Dataset.count().then(n => { dsCount.textContent = `Datensatz: ${n} Bilder`; return n; }).catch(() => {});
+    dsRefresh();
     bindEvent(screenshotBtn, 'click', () => {
         if (!vidEl.videoWidth || !vidEl.videoHeight) return;
         const canvas = document.createElement('canvas');
         canvas.width = vidEl.videoWidth; canvas.height = vidEl.videoHeight;
         canvas.getContext('2d').drawImage(vidEl, 0, 0, canvas.width, canvas.height);
-        canvas.toBlob(blob => {
-            if (!blob) return;
-            const url = URL.createObjectURL(blob), a = document.createElement('a');
-            a.href = url; a.download = `dartly-frame-${Date.now()}.jpg`;
-            document.body.append(a); a.click(); a.remove();
-            setTimeout(() => URL.revokeObjectURL(url), 3000);
-        }, 'image/jpeg', 0.94);
+        canvas.toBlob(async blob => {
+            const old = screenshotBtn.innerHTML, uc = ULTRA.cfg();
+            if (uc.on && uc.key && uc.dataset) ULTRA.enqueue(blob);
+            try { await Dataset.add(blob); const n = await dsRefresh(); screenshotBtn.textContent = `✓ Im Datensatz (${n})`; }
+            catch (err) { screenshotBtn.textContent = 'Speichern fehlgeschlagen'; console.warn(err); }
+            setTimeout(() => { screenshotBtn.innerHTML = old; }, 1500);
+        }, 'image/jpeg', 0.92);
     });
+    bindEvent('ds-export', 'click', async () => {
+        if (!(await dsRefresh())) { dsCount.textContent = 'Datensatz ist leer – erst Frames speichern'; return; }
+        const a = document.createElement('a'); a.href = URL.createObjectURL(await Dataset.exportZip()); a.download = `darts-datensatz-${Math.floor(Date.now() / 1000)}.zip`;
+        document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    });
+    bindEvent('ds-clear', 'click', async () => { if (confirm('Alle gesammelten Frames löschen?')) { await Dataset.clear(); dsRefresh(); } });
 
     const receivers = { left: null, right: null, third: null }, remoteStreams = { left: null, right: null, third: null }, localStreams = { left: null, right: null, third: null };
     const enginesBySide = { left: engine, right: rightEngine, third: thirdEngine };
@@ -2849,6 +2983,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (video.srcObject) video.srcObject = null;
         $(`camera-status-${side}`).textContent = 'Deaktiviert';
         $(`pair-status-${side}`).textContent = 'Deaktiviert';
+        if (fusionQueues[side]) { for (const pending of fusionQueues[side]) clearTimeout(pending.timer); fusionQueues[side].length = 0; }
     };
 
     const setSecondCameraEnabled = enabled => {
@@ -2861,8 +2996,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         $('ref-box-third').hidden = !thirdCamEnabled;
         $('camera-view-right').hidden = !secondCamEnabled;
         $('ref-box-right').hidden = !secondCamEnabled;
+        $('fusion-status').hidden = true;
+
         const multiCam = secondCamEnabled || thirdCamEnabled;
-        $('fusion-status').hidden = !multiCam;
         $('dual-pair-grid').classList.toggle('single-cam', !multiCam);
         $('dual-camera-grid').classList.toggle('single-cam', !multiCam);
         $('ref-grid').classList.toggle('single-cam', !multiCam);
@@ -2872,7 +3008,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         $('camera-title-left').textContent = 'Kamera 1';
         $('ref-cam-name-left').textContent = 'KAMERA 1';
         $('cam-mode-hint').textContent = `${1 + (secondCamEnabled ? 1 : 0) + (thirdCamEnabled ? 1 : 0)} Kamera(n) aktiv`;
-        $('fusion-status').textContent = multiCam ? 'Kamerafusion aktiv · zeitnahe Treffer werden positionsbasiert abgeglichen.' : 'Einzelkamera aktiv.';
+        $('fusion-status').textContent = 'Jede Kamera erkennt einzeln.';
 
         engine.layoutOverlays();
         if (secondCamEnabled) {
@@ -2903,9 +3039,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       const multiCam = secondCamEnabled || thirdCamEnabled;
       $('camera-view-third').hidden = !thirdCamEnabled; $('pair-card-third').hidden = !thirdCamEnabled; $('ref-box-third').hidden = !thirdCamEnabled;
       $('dual-pair-grid').classList.toggle('single-cam', !multiCam); $('dual-camera-grid').classList.toggle('single-cam', !multiCam); $('ref-grid').classList.toggle('single-cam', !multiCam);
-      $('fusion-status').hidden = !multiCam;
-      $('fusion-status').textContent = multiCam ? 'Kamerafusion aktiv · zeitnahe Treffer werden positionsbasiert abgeglichen.' : 'Einzelkamera aktiv.';
-      $('cam-mode-hint').textContent = `${1 + (secondCamEnabled ? 1 : 0) + (thirdCamEnabled ? 1 : 0)} Kamera(n) aktiv`;
+      $('fusion-status').hidden = true; $('cam-mode-hint').textContent = `${1 + (secondCamEnabled ? 1 : 0) + (thirdCamEnabled ? 1 : 0)} Kamera(n) aktiv`;
       if (thirdCamEnabled) { initPeerConnection('third'); setTimeout(() => thirdEngine.layoutOverlays(), 50); } else stopCameraSide('third');
     });
 
@@ -3060,8 +3194,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     bindEvent(vidEl, 'play', () => { if (engine.isVideoFileMode) playBtn.innerHTML = ICON.pause + 'Pause'; });
     bindEvent(vidEl, 'pause', () => { if (engine.isVideoFileMode) playBtn.innerHTML = ICON.play + 'Weiter'; });
     engine.on('turn-reset', ({ darts }) => {
-        for (const pending of pendingCameraHits) clearTimeout(pending.timer);
-        pendingCameraHits.length = 0;
+        fusedTurnCount = 0;
+        for (const side of ['left','right']) { for (const pending of fusionQueues[side]) clearTimeout(pending.timer); fusionQueues[side].length = 0; }
         pauseGeneration++; pauseUpdateFn = null;
         clearTimeout(dartPullTimer); dartPullTimer = null;
         skipPauseBtn.hidden = true; pauseCountdown.hidden = true; turnHud.classList.remove('pause-active');
