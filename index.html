@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Dartly – Auswahl</title>
+
+<!-- PWA Manifest & Meta-Tags -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#00ff88">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+<style>
+  :root { --accent:#00ff88; --bg:#0a0c10; --card:rgba(28,31,38,.9); --gray:rgba(255,255,255,.55); }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: #fff;
+    font-family: system-ui, -apple-system, Segoe UI, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  h1 { font-size: 1.8rem; margin: 0 0 4px; letter-spacing: .5px; text-align: center; }
+  .sub { color: var(--gray); font-size: 0.85rem; letter-spacing: 2px; margin: 0 0 30px; text-align: center; }
+  
+  .container {
+    width: 100%;
+    max-width: 420px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  
+  .menu-card {
+    background: var(--card);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 20px;
+    padding: 24px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    text-decoration: none;
+    color: inherit;
+    transition: all 0.2s ease;
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  }
+  
+  .menu-card:hover {
+    border-color: var(--accent);
+    transform: translateY(-2px);
+    background: rgba(35, 40, 50, 0.95);
+  }
+
+  .icon-box {
+    width: 60px;
+    height: 60px;
+    border-radius: 16px;
+    background: rgba(0, 255, 136, 0.1);
+    border: 1px solid rgba(0, 255, 136, 0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: var(--accent);
+  }
+
+  .icon-box svg {
+    width: 30px;
+    height: 30px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .info h2 {
+    font-size: 1.15rem;
+    margin: 0 0 4px;
+  }
+
+  .info p {
+    color: var(--gray);
+    font-size: 0.85rem;
+    margin: 0;
+    line-height: 1.4;
+  }
+</style>
+</head>
+<body>
+
+  <h1>Dartly Arena</h1>
+  <p class="sub">WÄHLE DEINEN MODUS</p>
+
+  <div class="container">
+    <!-- Handy Kamera Modus -->
+    <a href="camera_stream.html" class="menu-card">
+      <div class="icon-box">
+        <svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2.5"/><path d="M11 18.5h2"/></svg>
+      </div>
+      <div class="info">
+        <h2>Handy-Kamera</h2>
+        <p>Nutze dieses Gerät als feste Board-Kamera und verbinde es mit dem Tablet.</p>
+      </div>
+    </a>
+
+    <!-- Tablet / Empfänger Modus -->
+    <a href="camera_tablet.html" class="menu-card">
+      <div class="icon-box">
+        <svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M12 17v4M8 21h8"/></svg>
+      </div>
+      <div class="info">
+        <h2>Tablet / Analyse</h2>
+        <p>Empfange das Live-Bild, kalibriere das Board und werte deine Würfe aus.</p>
+      </div>
+    </a>
+  </div>
+
+  <!-- Service Worker Registrierung -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+          .then(reg => console.log('Dartly ServiceWorker registriert:', reg.scope))
+          .catch(err => console.error('ServiceWorker Fehler:', err));
+      });
+    }
+  </script>
+
+</body>
+</html>
