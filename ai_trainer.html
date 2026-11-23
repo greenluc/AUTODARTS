@@ -1,0 +1,1106 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dart-KI-Trainer v2</title>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+:root{--bg:#0f111a;--card:#161b2e;--bd:rgba(255,255,255,.12);--ac:#00ff88;--gr:#8a8d9b}
+*{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,-apple-system,Segoe UI,sans-serif}
+body{background:var(--bg);color:#fff;padding:14px;max-width:1250px;margin:auto}
+h1{font-size:1.3rem;margin-bottom:10px}h2{font-size:1rem;border-bottom:1px solid var(--bd);padding-bottom:6px}
+.layout{display:grid;grid-template-columns:1.5fr 1fr;gap:12px;margin-top:12px}@media(max-width:900px){.layout{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:9px}
+.row{display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:space-between}
+.btn{background:rgba(255,255,255,.08);color:#fff;border:1px solid var(--bd);padding:7px 10px;border-radius:9px;font-size:.78rem;font-weight:600;cursor:pointer}
+.btn:hover:not(:disabled){background:rgba(255,255,255,.16)}.btn:disabled{opacity:.35;cursor:not-allowed}
+.ac{color:var(--ac);border-color:rgba(0,255,136,.5);background:rgba(0,255,136,.14)}.dg{color:#ff8787;border-color:rgba(255,71,87,.5);background:rgba(255,71,87,.14)}.on{outline:2px solid var(--ac)}
+.cbox{background:#07090f;border:1px solid var(--bd);border-radius:10px;overflow:hidden;display:flex;justify-content:center}
+#cv{max-width:100%;max-height:66vh;width:auto;height:auto;cursor:crosshair;touch-action:none}
+select,input[type=number]{background:#171b2b;color:#fff;border:1px solid var(--bd);border-radius:6px;padding:5px 8px;width:100px}
+label{font-size:.8rem}.sm{font-size:.74rem;color:var(--gr);line-height:1.4}
+.ov{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start}.ov>div{flex:1;min-width:220px}
+.st{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}.st div{background:#0005;border:1px solid var(--bd);border-radius:8px;padding:5px;font-size:.68rem;color:var(--gr)}.st b{display:block;font-size:1.1rem;color:var(--ac)}
+#cov{background:#07090f;border:1px solid var(--bd);border-radius:10px;width:150px;height:150px}
+.gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:7px;max-height:330px;overflow:auto;padding:2px}
+.th{position:relative;border:2px solid var(--bd);border-radius:8px;overflow:hidden;cursor:pointer;font-size:.62rem;background:#000}.th.cur{border-color:var(--ac)}
+.th img{width:100%;aspect-ratio:4/3;object-fit:cover;display:block}.th i{position:absolute;width:5px;height:5px;border-radius:50%;transform:translate(-50%,-50%);border:1px solid #fff}
+.th div{display:flex;justify-content:space-between;padding:2px 4px;background:#000a}
+#log{background:#07090f;border:1px solid var(--bd);border-radius:8px;padding:8px;height:140px;overflow-y:auto;font:.7rem ui-monospace,monospace;color:#cfd6e6}
+#chart{width:100%;height:90px;background:#07090f;border:1px solid var(--bd);border-radius:8px}
+textarea{width:100%;height:90px;background:#07090f;color:#cfd6e6;border:1px solid var(--bd);border-radius:8px;font:.68rem ui-monospace,monospace;padding:6px}
+
+#app{display:grid;grid-template-columns:185px 1fr;gap:12px;align-items:start}
+#nav{position:sticky;top:10px;display:flex;flex-direction:column;gap:6px;background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:10px}
+#nav button{text-align:left;padding:11px 12px;font-size:.88rem}#nav .logo{font-weight:700;padding:4px 6px 8px}
+#bar{font-size:.66rem;color:var(--gr);margin-top:6px;word-break:break-word;line-height:1.35}
+.scr{display:none;flex-direction:column;gap:12px}.scr.on{display:flex}
+.edit{display:grid;grid-template-columns:1.6fr 1fr;gap:12px}
+@media(max-width:900px){#app{grid-template-columns:1fr}#nav{position:static;flex-direction:row;overflow-x:auto}#nav .logo,#bar{display:none}.edit{grid-template-columns:1fr}}
+.big{padding:14px;font-size:1rem}#steps div{padding:5px 8px;font-size:.82rem;border-left:3px solid var(--bd);margin:3px 0}
+details summary{cursor:pointer;font-size:.8rem;color:var(--gr);margin:4px 0}details .row{justify-content:flex-start;margin-top:6px}
+</style>
+</head>
+<body>
+<div id="app">
+<nav id="nav"><div class="logo">🎯 Dart-KI-Trainer</div>
+<button class="btn on" data-s="data">📁 Daten</button><button class="btn" data-s="edit">✏️ Prüfen</button><button class="btn" data-s="train">🧠 Training</button><button class="btn" data-s="model">📦 Test &amp; Export</button>
+<div id="bar"></div></nav>
+<main>
+
+<section class="scr on" id="s-data">
+<div class="card"><h2>🤖 Automatik</h2>
+<p class="sm">Ein Klick: leeres Board berechnen → Board automatisch kalibrieren → Darts vorerkennen → nach Licht in TRAIN/TEST aufteilen. Danach musst du im Reiter „Prüfen“ nur noch korrigieren.</p>
+<button class="btn ac big" id="b-auto">▶ Alles automatisch</button>
+<div id="steps"><div>① Hintergrund (Median)</div><div>② Board-Kalibrierung (19 Punkte)</div><div>③ Darts vorerkennen</div><div>④ TRAIN/TEST nach Licht</div></div>
+<p class="sm">Die Auto-Kalibrierung nutzt den Code aus <b>camera_tablet.html</b> und lädt einmalig OpenCV.js (Internet nötig). Für die Vorerkennung brauchst du mind. 3 Bilder je Bildgröße (Kamera fest, Darts an verschiedenen Stellen).</p></div>
+<div class="card"><h2>📥 Daten laden &amp; sichern</h2>
+<div class="row" style="justify-content:flex-start"><button class="btn ac" id="b-zip">📦 ZIP laden</button><button class="btn" id="b-imgs">🖼️ Bilder laden</button><button class="btn" id="b-json">📄 JSON laden</button><button class="btn ac" id="b-ezip">⬇️ ZIP speichern</button><button class="btn" id="b-ejson">💾 JSON speichern</button></div>
+<input type="file" id="i-zip" accept=".zip" hidden><input type="file" id="i-imgs" accept="image/*" multiple hidden><input type="file" id="i-json" accept=".json" hidden></div>
+<div class="card"><h2>🖼️ Galerie &amp; Übersicht</h2>
+<div class="ov"><div><div class="st"><div>TRAIN<b id="n-tr">0</b></div><div>TEST<b id="n-va">0</b></div><div>Darts<b id="n-d">0</b></div><div>kalibriert<b id="n-c">0</b></div></div>
+<p class="sm" id="light" style="margin-top:6px"></p><p class="sm">TEST-Bilder werden <b>nie</b> trainiert, nur bewertet. Hell/Mittel/Dunkel wird gleichmäßig auf TRAIN und TEST verteilt.</p></div>
+<div style="flex:0 0 150px"><canvas id="cov" width="150" height="150"></canvas><p class="sm">Abdeckung: <span style="color:#00ff88">TRAIN</span> <span style="color:#ffd43b">TEST</span></p></div></div>
+<div class="row"><select id="flt" style="width:auto"><option value="all">Alle Bilder</option><option value="unrev">Ungeprüft</option><option value="train">Nur TRAIN</option><option value="val">Nur TEST</option><option value="none">Ohne Annotation</option><option value="auto">Nur Vorschläge (⚙)</option><option value="0">Licht: dunkel</option><option value="1">Licht: mittel</option><option value="2">Licht: hell</option></select><button class="btn" id="b-split">🔀 Neu aufteilen nach Licht</button></div>
+<div class="gal" id="gal"></div></div>
+</section>
+
+<section class="scr" id="s-edit"><div class="edit">
+<div class="card"><div class="row"><span id="cnt" class="sm"></span><span id="prog" class="sm"></span></div>
+<div class="cbox"><canvas id="cv" width="640" height="480"></canvas></div>
+<div class="row"><button class="btn" id="b-prev">◀</button><button class="btn ac" id="b-chk">✔ Geprüft &amp; weiter (Enter)</button><button class="btn" id="b-nextrev">⏭ Nächstes ungeprüftes</button><button class="btn" id="b-next">▶</button></div>
+<p class="sm">Klick = Punkt setzen (Spitze → Flight), ziehen = verschieben, Entf = letzten Dart löschen, ←/→ = Bild wechseln, Enter = geprüft.</p></div>
+<div class="card">
+<h2>Annotation</h2>
+<div class="row"><div class="row"><button class="btn on" id="m-tip" style="color:#ff8787">🎯 Spitze</button><button class="btn" id="m-fl" style="color:#74c0fc">🪶 Flight</button></div><span id="slot" class="sm"></span></div>
+<div class="row"><div class="row"><button class="btn" id="s-tr">TRAIN</button><button class="btn" id="s-va">TEST</button></div><div class="row"><button class="btn dg" id="b-clr">Leeren</button><button class="btn dg" id="b-del">🗑️ Bild</button></div></div>
+<h2>Kalibrierung (19 Punkte)</h2>
+<p class="sm" id="cal"></p>
+<div class="row" style="justify-content:flex-start"><button class="btn ac" id="b-acal">🤖 Auto</button><button class="btn" id="b-cedit">✏️ Punkte bearbeiten</button><button class="btn" id="b-cal">🔁 Manuell neu</button><button class="btn" id="b-calall">⇉ Auf alle (gleiche Größe)</button><button class="btn dg" id="b-calx">✕</button></div>
+<label><input type="checkbox" id="ovl" checked> Board-Overlay anzeigen</label>
+<h2>Vorschläge</h2>
+<div class="row" style="justify-content:flex-start"><button class="btn ac" id="b-math">🧮 Darts erkennen (Pixeldifferenz)</button><button class="btn" id="b-pred">🔍 KI-Modell testen</button><button class="btn" id="b-take">✔ Vorschlag übernehmen</button><button class="btn" id="b-nnall">🤖 KI-Vorschläge für alle ungeprüften</button></div>
+<details><summary>Erweitert (Referenz &amp; Stapel)</summary><div class="row"><button class="btn" id="b-ref">⭐ Dieses Bild = leeres Board</button><button class="btn" id="b-med">🧮 Median-Hintergrund</button><button class="btn" id="b-mall">🧮 Mathe: alle Bilder</button><button class="btn" id="b-acc">✔ Alle Vorschläge übernehmen</button></div></details>
+</div></div></section>
+
+<section class="scr" id="s-train"><div class="card">
+<h2>🧠 Modell trainieren</h2>
+<button class="btn ac big" id="b-trainall" disabled>🚀 Alles trainieren (Apex → Sniper)</button>
+<p class="sm">Trainiert beide Modelle nacheinander mit den Standardwerten, nur mit geprüften TRAIN-Bildern. Oder einzeln:</p>
+<div class="row" style="justify-content:stretch"><button class="btn on" id="t1" style="flex:1">⚡ Apex</button><button class="btn" id="t2" style="flex:1">🎯 Sniper</button></div>
+<p class="sm" id="desc"></p>
+<div class="row"><label>Eingabegröße</label><select id="size"></select></div>
+<div class="row"><label>Epochen</label><input type="number" id="ep" value="40" min="1" max="500"></div>
+<div class="row"><label>Batchgröße</label><input type="number" id="bs" value="8" min="1" max="64"></div>
+<div class="row"><label>Lernrate</label><input type="number" id="lr" value="0.002" step="0.0005" min="0.0001" max="0.05"></div>
+<div class="row"><label>Erkennungsschwelle</label><input type="number" id="thr" value="0.3" step="0.05" min="0.05" max="0.95"></div>
+<div class="row"><label><input type="checkbox" id="aug" checked> Augmentation (Drehen, Zoom, Spiegeln, Licht, Rauschen)</label></div>
+<div class="row"><label>Stärke</label><select id="augs" style="width:auto"><option value="2" selected>Stark (360°, ±25 % Versatz)</option><option value="1">Normal (±10°)</option></select></div>
+<div class="row"><label>Perspektive</label><select id="persp" style="width:auto"><option value="0.16" selected>Stark</option><option value="0.08">Mittel</option><option value="0">Aus</option></select></div>
+<div class="row"><label><input type="checkbox" id="cp" checked> Darts an zufällige Stellen kopieren (Apex)</label></div>
+<div class="row"><label><input type="checkbox" id="cont"> vorhandenes Modell weitertrainieren</label></div>
+<div class="row"><button class="btn ac" id="b-train" style="flex:1">🚀 Dieses Modell trainieren</button><button class="btn dg" id="b-stop" disabled>Stopp</button></div>
+<div class="sm" id="status">Bereit.</div>
+<canvas id="chart" width="400" height="90"></canvas>
+<div class="sm"><span style="color:#00ff88">━ Train-Loss</span> &nbsp; <span style="color:#ffd43b">━ Test-Loss</span></div>
+</div></section>
+
+<section class="scr" id="s-model"><div class="card">
+<h2>📊 Bewerten</h2>
+<div class="row" style="justify-content:flex-start"><button class="btn ac" id="b-eval">📊 Test-Set bewerten</button></div>
+<h2>⬇️ Speichern &amp; einsetzen</h2>
+<div class="row" style="justify-content:flex-start"><button class="btn ac" id="b-exp">⬇️ Modell herunterladen</button><button class="btn" id="b-lm">📂 Modell laden</button><button class="btn" id="b-snip">📋 Einbau-Code</button></div>
+<input type="file" id="i-mod" accept=".json,.bin" multiple hidden><textarea id="snip" hidden readonly></textarea>
+<h2>Protokoll</h2><div id="log"></div>
+</div></section>
+
+</main></div>
+<script>
+const BOARD = { size: 200, cx: 100, cy: 100, rOuter: 91 };
+const BOARD_MM = { bullseye: 6.35, singleBull: 15.9, tripleInner: 99, tripleOuter: 107, doubleInner: 162, doubleOuter: 170 };
+const REAL_BOARD_RADII = Object.fromEntries(Object.entries(BOARD_MM).map(([k, v]) => [k, +(v * BOARD.rOuter / BOARD_MM.doubleOuter).toFixed(2)]));
+const DEFAULT_RADII = REAL_BOARD_RADII;
+const ANCHOR_DEFINITIONS = [
+  { deg: null, label: 'Punkt 1: Bullseye (Zentrum)', isCenter: true },
+  { deg: 9, ring: 'singleBull', label: 'Punkt 2: Außenkante Single Bull (Radius)' },
+  { deg: 9, ring: 'double', label: 'Punkt 3: Doppelring außen, Draht 20 | 1 (oben)' },
+  { deg: 45, ring: 'double', label: 'Punkt 4: Doppelring außen, Draht 18 | 4 (oben rechts)' },
+  { deg: 81, ring: 'double', label: 'Punkt 5: Doppelring außen, Draht 6 | 13 (rechts)' },
+  { deg: 117, ring: 'double', label: 'Punkt 6: Doppelring außen, Draht 10 | 15 (unten rechts)' },
+  { deg: 153, ring: 'double', label: 'Punkt 7: Doppelring außen, Draht 2 | 17 (unten rechts)' },
+  { deg: 189, ring: 'double', label: 'Punkt 8: Doppelring außen, Draht 3 | 19 (unten)' },
+  { deg: 225, ring: 'double', label: 'Punkt 9: Doppelring außen, Draht 7 | 16 (unten links)' },
+  { deg: 261, ring: 'double', label: 'Punkt 10: Doppelring außen, Draht 8 | 11 (links)' },
+  { deg: 297, ring: 'double', label: 'Punkt 11: Doppelring außen, Draht 14 | 9 (oben links)' },
+  { deg: 333, ring: 'double', label: 'Punkt 12: Doppelring außen, Draht 12 | 5 (oben links)' },
+  { deg: 27, ring: 'triple', label: 'Punkt 13: Triple-Ring außen (oben rechts)' },
+  { deg: 81, ring: 'triple', label: 'Punkt 14: Triple-Ring außen (rechts oben)' },
+  { deg: 135, ring: 'triple', label: 'Punkt 15: Triple-Ring außen (rechts unten)' },
+  { deg: 189, ring: 'triple', label: 'Punkt 16: Triple-Ring außen (unten)' },
+  { deg: 243, ring: 'triple', label: 'Punkt 17: Triple-Ring außen (links unten)' },
+  { deg: 297, ring: 'triple', label: 'Punkt 18: Triple-Ring außen (links oben)' },
+  { deg: 351, ring: 'triple', label: 'Punkt 19: Triple-Ring außen (oben)' },
+];
+const ANCHOR_COUNT = ANCHOR_DEFINITIONS.length;
+
+const CALIB_TARGETS = ANCHOR_DEFINITIONS.map(w => {
+  if (w.isCenter) return { label: w.label, x: BOARD.cx, y: BOARD.cy };
+  const t = (w.deg - 90) * Math.PI / 180;
+  const r = w.ring === 'singleBull' ? DEFAULT_RADII.singleBull : (w.ring === 'triple' ? DEFAULT_RADII.tripleOuter : BOARD.rOuter);
+  return { label: w.label, x: BOARD.cx + r * Math.cos(t), y: BOARD.cy + r * Math.sin(t) };
+});
+
+function pxPerMmFromAnchors(points) {
+  const center = points[ANCHOR_DEFINITIONS.findIndex(a => a.isCenter)];
+  if (!center) return 0;
+  const outer = ANCHOR_DEFINITIONS.flatMap((a, i) => a.ring === 'double' ? [Math.hypot(points[i].x - center.x, points[i].y - center.y)] : []);
+  return outer.length ? outer.reduce((s, d) => s + d, 0) / outer.length / BOARD_MM.doubleOuter : 0;
+}
+class Homography {
+  static normalize(pts) {
+    const n = pts.length;
+    const cx = pts.reduce((s, p) => s + p.x, 0) / n, cy = pts.reduce((s, p) => s + p.y, 0) / n;
+    const md = pts.reduce((s, p) => s + Math.hypot(p.x - cx, p.y - cy), 0) / n;
+    const s = md > 1e-9 ? Math.SQRT2 / md : 1;
+    return { T: [[s, 0, -s * cx], [0, s, -s * cy], [0, 0, 1]], pts: pts.map(p => ({ x: (p.x - cx) * s, y: (p.y - cy) * s })) };
+  }
+
+  static mul3(A, B) {
+    return A.map((_, i) => [0, 1, 2].map(j => A[i][0] * B[0][j] + A[i][1] * B[1][j] + A[i][2] * B[2][j]));
+  }
+
+  static jacobiEigen(S) {
+    const n = S.length, A = S.map(r => r.slice());
+    const V = Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => (i === j ? 1 : 0)));
+    for (let sweep = 0; sweep < 100; sweep++) {
+      let off = 0;
+      for (let p = 0; p < n - 1; p++) for (let q = p + 1; q < n; q++) off += A[p][q] * A[p][q];
+      if (off < 1e-24) break;
+      for (let p = 0; p < n - 1; p++) {
+        for (let q = p + 1; q < n; q++) {
+          if (Math.abs(A[p][q]) < 1e-300) continue;
+          const theta = (A[q][q] - A[p][p]) / (2 * A[p][q]);
+          const t = (theta >= 0 ? 1 : -1) / (Math.abs(theta) + Math.sqrt(theta * theta + 1));
+          const c = 1 / Math.sqrt(t * t + 1), s = t * c;
+          for (let k = 0; k < n; k++) { const x = A[k][p], y = A[k][q]; A[k][p] = c * x - s * y; A[k][q] = s * x + c * y; }
+          for (let k = 0; k < n; k++) { const x = A[p][k], y = A[q][k]; A[p][k] = c * x - s * y; A[q][k] = s * x + c * y; }
+          for (let k = 0; k < n; k++) { const x = V[k][p], y = V[k][q]; V[k][p] = c * x - s * y; V[k][q] = s * x + c * y; }
+        }
+      }
+    }
+    return { values: A.map((r, i) => r[i]), V };
+  }
+
+  static solveLeastSquares(src, dst) {
+    const n = src.length;
+    if (n < 4 || dst.length < n) return null;
+    const ns = Homography.normalize(src), nd = Homography.normalize(dst.slice(0, n));
+    const ATA = Array.from({ length: 9 }, () => new Array(9).fill(0));
+    for (let i = 0; i < n; i++) {
+      const { x, y } = ns.pts[i], { x: X, y: Y } = nd.pts[i];
+      for (const r of [[-x, -y, -1, 0, 0, 0, x * X, y * X, X], [0, 0, 0, -x, -y, -1, x * Y, y * Y, Y]]) {
+        for (let a = 0; a < 9; a++) for (let b = 0; b < 9; b++) ATA[a][b] += r[a] * r[b];
+      }
+    }
+    const { values, V } = Homography.jacobiEigen(ATA);
+    let k = 0; for (let i = 1; i < 9; i++) if (values[i] < values[k]) k = i;
+    const h = V.map(row => row[k]);
+    const Hn = [[h[0], h[1], h[2]], [h[3], h[4], h[5]], [h[6], h[7], h[8]]];
+    const Tinv = Homography.invert(nd.T);
+    if (!Tinv) return null;
+    const H = Homography.mul3(Homography.mul3(Tinv, Hn), ns.T);
+    if (!isFinite(H[2][2]) || Math.abs(H[2][2]) < 1e-12) return null;
+    const out = H.map(r => r.map(v => v / H[2][2]));
+    return out.every(r => r.every(Number.isFinite)) ? out : null;
+  }
+
+  // Nichtlineare Verfeinerung (Levenberg-Marquardt): minimiert den geometrischen Fehler statt des algebraischen DLT-Fehlers
+  static refine(H0, src, dst, iters = 25) {
+    const cost = H => { let c = 0; for (let i = 0; i < src.length; i++) { const q = Homography.apply(H, src[i].x, src[i].y); c += (q.x - dst[i].x) ** 2 + (q.y - dst[i].y) ** 2; } return c; };
+    const toH = p => [[p[0], p[1], p[2]], [p[3], p[4], p[5]], [p[6], p[7], 1]];
+    let p = [].concat(...H0).slice(0, 8), c = cost(toH(p)), lam = 1e-3;
+    if (!isFinite(c)) return H0;
+    for (let it = 0; it < iters; it++) {
+      const JTJ = Array.from({ length: 8 }, () => new Array(8).fill(0)), JTr = new Array(8).fill(0);
+      for (let i = 0; i < src.length; i++) {
+        const { x, y } = src[i], w = p[6] * x + p[7] * y + 1, u = p[0] * x + p[1] * y + p[2], v = p[3] * x + p[4] * y + p[5];
+        const rows = [[x / w, y / w, 1 / w, 0, 0, 0, -u * x / (w * w), -u * y / (w * w), u / w - dst[i].x], [0, 0, 0, x / w, y / w, 1 / w, -v * x / (w * w), -v * y / (w * w), v / w - dst[i].y]];
+        for (const r of rows) for (let a = 0; a < 8; a++) { JTr[a] += r[a] * r[8]; for (let b = 0; b < 8; b++) JTJ[a][b] += r[a] * r[b]; }
+      }
+      let improved = false;
+      for (let tries = 0; tries < 6 && !improved; tries++) {
+        const A = JTJ.map((r, a) => r.map((v, b) => v + (a === b ? lam * (JTJ[a][a] + 1e-9) : 0))), bvec = JTr.map(v => -v);
+        for (let k = 0; k < 8; k++) { // Gauss-Elimination
+          let m = k; for (let r = k + 1; r < 8; r++) if (Math.abs(A[r][k]) > Math.abs(A[m][k])) m = r;
+          [A[k], A[m]] = [A[m], A[k]]; [bvec[k], bvec[m]] = [bvec[m], bvec[k]];
+          if (Math.abs(A[k][k]) < 1e-18) break;
+          for (let r = k + 1; r < 8; r++) { const f = A[r][k] / A[k][k]; for (let cc = k; cc < 8; cc++) A[r][cc] -= f * A[k][cc]; bvec[r] -= f * bvec[k]; }
+        }
+        const d = new Array(8).fill(0);
+        for (let k = 7; k >= 0; k--) { let acc = bvec[k]; for (let cc = k + 1; cc < 8; cc++) acc -= A[k][cc] * d[cc]; d[k] = Math.abs(A[k][k]) < 1e-18 ? 0 : acc / A[k][k]; }
+        const pn = p.map((v, k) => v + d[k]), cn = cost(toH(pn));
+        if (isFinite(cn) && cn < c) { p = pn; c = cn; lam = Math.max(lam / 3, 1e-9); improved = true; } else lam *= 5;
+      }
+      if (!improved) break;
+    }
+    return toH(p);
+  }
+
+  static evaluate(src, dst, idx) {
+    let H = Homography.solveLeastSquares(idx.map(i => src[i]), idx.map(i => dst[i]));
+    if (H) { // Rauschen liegt in den Kamerapunkten: im Kamerabild (Brett -> Kamera) verfeinern, dann zurückinvertieren
+      const G0 = Homography.invert(H);
+      if (G0) { const G = Homography.refine(G0.map(r => r.map(v => v / G0[2][2])), idx.map(i => dst[i]), idx.map(i => src[i])), Hn = Homography.invert(G); if (Hn && Hn.every(r => r.every(Number.isFinite))) H = Hn.map(r => r.map(v => v / Hn[2][2])); }
+    }
+    if (!H || !Homography.invert(H)) return null;
+    const ws = idx.map(i => H[2][0] * src[i].x + H[2][1] * src[i].y + H[2][2]);
+    if (!(ws.every(w => w > 0) || ws.every(w => w < 0))) return null;
+    const errs = idx.map(i => { const q = Homography.apply(H, src[i].x, src[i].y); return Math.hypot(q.x - dst[i].x, q.y - dst[i].y); });
+    return { H, rms: Math.sqrt(errs.reduce((s, e) => s + e * e, 0) / errs.length) };
+  }
+
+  // Radiale Verzerrung k1 (Normierung: Bildbreite). Wird nur übernommen, wenn der Kalibrierfehler deutlich sinkt.
+  static undistort(p, k, cx, cy, f) { const dx = p.x - cx, dy = p.y - cy, g = 1 + k * (dx * dx + dy * dy) / (f * f); return { x: cx + dx * g, y: cy + dy * g }; }
+  static distort(p, k, cx, cy, f) {
+    let x = p.x, y = p.y;
+    for (let i = 0; i < 6; i++) { const dx = x - cx, dy = y - cy, g = 1 + k * (dx * dx + dy * dy) / (f * f); x = cx + (p.x - cx) / g; y = cy + (p.y - cy) / g; }
+    return { x, y };
+  }
+  static estimateK1(pts, targets, w, h) {
+    const cx = w / 2, cy = h / 2, rms = k => { const r = Homography.fit(pts.map(q => Homography.undistort(q, k, cx, cy, w)), targets); return r ? r.rms : Infinity; };
+    const base = rms(0); let best = 0, bv = base;
+    for (let k = -0.3; k <= 0.3001; k += 0.02) { const v = rms(k); if (v < bv) { bv = v; best = k; } }
+    for (let d = -0.01; d <= 0.0101; d += 0.0025) { const k = best + d, v = rms(k); if (v < bv) { bv = v; best = k; } }
+    return bv <= base * 0.75 && base > 0.3 && Math.abs(best) > 0.01 ? best : 0;
+  }
+
+  static fit(src, dst, { maxRms = 3, minPts = 7, maxDrop = 3 } = {}) {
+    const n = Math.min(src.length, dst.length);
+    let used = [...Array(n).keys()], dropped = [];
+    let sol = Homography.evaluate(src, dst, used);
+    while (sol && sol.rms > maxRms && used.length > minPts && dropped.length < maxDrop) {
+      let best = null;
+      for (const u of used) {
+        const sub = used.filter(i => i !== u), s = Homography.evaluate(src, dst, sub);
+        if (s && (!best || s.rms < best.s.rms)) best = { u, s };
+      }
+      if (!best || best.s.rms > sol.rms * 0.7) break;
+      dropped.push(best.u); used = used.filter(i => i !== best.u); sol = best.s;
+    }
+    if (!sol) return null;
+    const errors = [...Array(n).keys()].map(i => { const q = Homography.apply(sol.H, src[i].x, src[i].y); return Math.hypot(q.x - dst[i].x, q.y - dst[i].y); });
+    let worst = 0; errors.forEach((e, i) => { if (e > errors[worst]) worst = i; });
+    return { H: sol.H, rms: sol.rms, used, dropped, errors, worst };
+  }
+
+  static apply(H, x, y) {
+    const w = H[2][0] * x + H[2][1] * y + H[2][2];
+    return { x: (H[0][0] * x + H[0][1] * y + H[0][2]) / w, y: (H[1][0] * x + H[1][1] * y + H[1][2]) / w };
+  }
+
+  static invert(m) {
+    const det = m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
+              - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
+              + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+    if (Math.abs(det) < 1e-14) return null;
+    const d = 1 / det;
+    return [
+      [(m[1][1] * m[2][2] - m[1][2] * m[2][1]) * d, (m[0][2] * m[2][1] - m[0][1] * m[2][2]) * d, (m[0][1] * m[1][2] - m[0][2] * m[1][1]) * d],
+      [(m[1][2] * m[2][0] - m[1][0] * m[2][2]) * d, (m[0][0] * m[2][2] - m[0][2] * m[2][0]) * d, (m[0][2] * m[1][0] - m[0][0] * m[1][2]) * d],
+      [(m[1][0] * m[2][1] - m[1][1] * m[2][0]) * d, (m[0][1] * m[2][0] - m[0][0] * m[2][1]) * d, (m[0][0] * m[1][1] - m[0][1] * m[1][0]) * d],
+    ];
+  }
+
+  static rescaleSource(H, sx, sy) {
+    return H.map(r => [r[0] * sx, r[1] * sy, r[2]]);
+  }
+}
+const AUTO_WIRE4 = [9, 81, 189, 279];
+const AUTO_RINGS_MM = [99, 107, 162, 170, 225];
+const AUTO_LADDER_MM = [15.9, 99, 107, 162, 170];
+const AUTO_K = BOARD.rOuter / 170;
+const AUTO_TARGETS4 = AUTO_WIRE4.map(d => ({ x: BOARD.cx + BOARD.rOuter * Math.cos((d - 90) * Math.PI / 180), y: BOARD.cy + BOARD.rOuter * Math.sin((d - 90) * Math.PI / 180) }));
+const AUTO_MODEL = (() => {
+  const m = [];
+  for (const rm of [99, 107, 162, 170]) for (let k = 0; k < 90; k++) { const t = 2 * Math.PI * k / 90; m.push(BOARD.cx + rm * AUTO_K * Math.cos(t), BOARD.cy + rm * AUTO_K * Math.sin(t)); }
+  for (let k = 0; k < 20; k++) { const t = (9 + 18 * k - 90) * Math.PI / 180; for (const rm of [30, 60, 90, 125, 150]) m.push(BOARD.cx + rm * AUTO_K * Math.cos(t), BOARD.cy + rm * AUTO_K * Math.sin(t)); }
+  return m;
+})();
+
+function homog4(src, dst) {
+  const M = [];
+  for (let i = 0; i < 4; i++) {
+    const { x, y } = src[i], { x: X, y: Y } = dst[i];
+    M.push([x, y, 1, 0, 0, 0, -x * X, -y * X, X], [0, 0, 0, x, y, 1, -x * Y, -y * Y, Y]);
+  }
+  for (let c = 0; c < 8; c++) {
+    let p = c; for (let r = c + 1; r < 8; r++) if (Math.abs(M[r][c]) > Math.abs(M[p][c])) p = r;
+    if (Math.abs(M[p][c]) < 1e-12) return null;
+    [M[c], M[p]] = [M[p], M[c]];
+    for (let r = c + 1; r < 8; r++) { const f = M[r][c] / M[c][c]; for (let k = c; k < 9; k++) M[r][k] -= f * M[c][k]; }
+  }
+  const h = new Array(8);
+  for (let i = 7; i >= 0; i--) { let s = M[i][8]; for (let k = i + 1; k < 8; k++) s -= M[i][k] * h[k]; h[i] = s / M[i][i]; }
+  return [[h[0], h[1], h[2]], [h[3], h[4], h[5]], [h[6], h[7], 1]];
+}
+
+const AUTO_LEVELS = {
+  1: { name: 'Minimal',  widths: [320, 480],           minFp: 0.35, sub: null, cross: false },
+  2: { name: 'Adaptive', widths: [320, 480, 640],      minFp: 0.36, sub: { maxW: 960,  iters: 5,  ring: 100 }, cross: true },
+  3: { name: 'Standard', widths: [400, 560, 720],      minFp: 0.42, sub: { maxW: 1280, iters: 6,  ring: 120 }, cross: true },
+  4: { name: 'Hoch',     widths: [560, 720, 900],      minFp: 0.55, sub: { maxW: 1600, iters: 8,  ring: 150 }, cross: true },
+  5: { name: 'Maximal',  widths: [720, 900],           minFp: 0.75, sub: { maxW: 2400, iters: 12, ring: 240 }, cross: true },
+};
+
+class AutoBoardDetector {
+  static sectorPattern(sm, w, h, cx, cy, A, f) {
+    const L = new Float64Array(360); let nan = 0, sum = 0;
+    for (let n = 0; n < 360; n++) {
+      const t = (n - 90) * Math.PI / 180, c = Math.cos(t), s = Math.sin(t);
+      const xi = Math.round(cx + f * (A[0][0] * c + A[0][1] * s)), yi = Math.round(cy + f * (A[1][0] * c + A[1][1] * s));
+      if (xi >= 0 && xi < w && yi >= 0 && yi < h) { L[n] = sm[yi * w + xi]; sum += L[n]; } else { L[n] = NaN; nan++; }
+    }
+    if (nan / 360 > 0.14) return null;
+    const mean = sum / (360 - nan); for (let n = 0; n < 360; n++) if (Number.isNaN(L[n])) L[n] = mean;
+    let re = 0, im = 0;
+    for (let n = 0; n < 360; n++) { const a = 2 * Math.PI * n / 36; re += L[n] * Math.cos(a); im -= L[n] * Math.sin(a); }
+    let rho = 18 - Math.atan2(im, re) * 18 / Math.PI; rho = ((((rho + 18) % 36) + 36) % 36) - 18;
+    const d = [], c = [];
+    for (let i = 0; i < 20; i++) {
+      let v = 0; for (let o = -5; o <= 5; o++) v += L[((Math.round(18 * i + rho + o) % 360) + 360) % 360];
+      (i % 2 === 0 ? d : c).push(v / 11);
+    }
+    const avg = a => a.reduce((x, y) => x + y, 0) / a.length, md = avg(d), mc = avg(c), mid = (md + mc) / 2;
+    const cons = (d.filter(v => v < mid).length + c.filter(v => v > mid).length) / 20;
+    return { rho, cons, contrast: (mc - md) / (mc + md + 1e-6) };
+  }
+
+  static ladder(lad, w, h, cx, cy, A, R) {
+    let tot = 0;
+    for (const rm of AUTO_LADDER_MM) {
+      const f = rm / R; let hit = 0;
+      for (let k = 0; k < 72; k++) {
+        const t = 2 * Math.PI * k / 72, c = Math.cos(t), s = Math.sin(t);
+        const x = Math.round(cx + f * (A[0][0] * c + A[0][1] * s)), y = Math.round(cy + f * (A[1][0] * c + A[1][1] * s));
+        if (x >= 0 && x < w && y >= 0 && y < h && lad[y * w + x]) hit++;
+      }
+      tot += hit / 72;
+    }
+    return tot / AUTO_LADDER_MM.length;
+  }
+
+  static finalPattern(Hbi, sm, w, h) {
+    let worst = 1;
+    for (const rm of [57.5, 134.5]) {
+      const r = rm * AUTO_K, L = new Float64Array(360); let nan = 0, sum = 0;
+      for (let n = 0; n < 360; n++) {
+        const t = (n - 90) * Math.PI / 180, p = Homography.apply(Hbi, BOARD.cx + r * Math.cos(t), BOARD.cy + r * Math.sin(t));
+        const xi = Math.round(p.x), yi = Math.round(p.y);
+        if (xi >= 0 && xi < w && yi >= 0 && yi < h) { L[n] = sm[yi * w + xi]; sum += L[n]; } else { L[n] = NaN; nan++; }
+      }
+      if (nan / 360 > 0.14) return 0;
+      const mean = sum / (360 - nan); for (let n = 0; n < 360; n++) if (Number.isNaN(L[n])) L[n] = mean;
+      const d = [], c = [];
+      for (let i = 0; i < 20; i++) { let v = 0; for (let o = -5; o <= 5; o++) v += L[((18 * i + o) % 360 + 360) % 360]; (i % 2 === 0 ? d : c).push(v / 11); }
+      const avg = a => a.reduce((x, y) => x + y, 0) / a.length, md = avg(d), mc = avg(c), mid = (md + mc) / 2;
+      const cons = (d.filter(v => v < mid).length + c.filter(v => v > mid).length) / 20;
+      worst = Math.min(worst, cons * Math.min(1, Math.max(0, (mc - md) / (mc + md + 1e-6)) / 0.22));
+    }
+    return worst;
+  }
+
+  static refine(P0, dt, w, h) {
+    const n = AUTO_MODEL.length / 2;
+    const cost = (P, tr) => {
+      const H = homog4(AUTO_TARGETS4, [{ x: P[0], y: P[1] }, { x: P[2], y: P[3] }, { x: P[4], y: P[5] }, { x: P[6], y: P[7] }]);
+      if (!H) return 1e9;
+      let sum = 0, inb = 0;
+      for (let k = 0; k < n; k++) {
+        const X = AUTO_MODEL[2 * k], Y = AUTO_MODEL[2 * k + 1], q = H[2][0] * X + H[2][1] * Y + H[2][2];
+        if (Math.abs(q) < 1e-9) return 1e9;
+        const x = (H[0][0] * X + H[0][1] * Y + H[0][2]) / q, y = (H[1][0] * X + H[1][1] * Y + H[1][2]) / q;
+        if (x >= 0 && x < w - 1 && y >= 0 && y < h - 1) { inb++; const d = dt[Math.round(y) * w + Math.round(x)]; sum += d < tr ? d : tr; } else sum += tr;
+      }
+      return inb / n < 0.85 ? 1e9 : sum / n;
+    };
+    let P = P0.slice();
+    for (const [step, tr] of [[6, 6], [3, 5], [1.5, 4], [0.75, 3], [0.4, 3]]) {
+      let c = cost(P, tr), improved = true, it = 0;
+      while (improved && it++ < 20) {
+        improved = false;
+        for (let i = 0; i < 8; i++) for (const sgn of [1, -1]) {
+          const Q = P.slice(); Q[i] += sgn * step; const cq = cost(Q, tr);
+          if (cq < c - 1e-9) { P = Q; c = cq; improved = true; }
+        }
+      }
+    }
+    return { P, cost: cost(P, 3) };
+  }
+
+  static analyze({ w, h, sm, lad, dt, cands }) {
+    const minD = Math.min(w, h), hyps = [];
+    for (const e of cands) {
+      const ca = Math.cos(e.ang), sa = Math.sin(e.ang);
+      const A = [[ca * ca * e.a + sa * sa * e.b, ca * sa * (e.a - e.b)], [ca * sa * (e.a - e.b), sa * sa * e.a + ca * ca * e.b]];
+      for (const R of AUTO_RINGS_MM) {
+        const a170 = e.a * 170 / R;
+        if (!(a170 > 0.09 * minD && a170 < 0.95 * minD)) continue;
+        const pr = AutoBoardDetector.sectorPattern(sm, w, h, e.cx, e.cy, A, 134.5 / R);
+        if (!pr) continue;
+        const pat = pr.cons * Math.min(1, Math.max(0, pr.contrast) / 0.24);
+        hyps.push({ e, A, R, rho: pr.rho, pat, lad: AutoBoardDetector.ladder(lad, w, h, e.cx, e.cy, A, R) });
+      }
+    }
+    const key = x => x.pat * x.lad - 0.03 * Math.abs(Math.log(170 / x.R));
+    hyps.sort((p, q) => key(q) - key(p));
+    let best = null;
+    for (const hp of hyps.slice(0, 10)) {
+      const f = 170 / hp.R, P0 = [];
+      for (const dg of AUTO_WIRE4) {
+        const phi = (dg - 90 + hp.rho) * Math.PI / 180, c = Math.cos(phi), s = Math.sin(phi);
+        P0.push(hp.e.cx + f * (hp.A[0][0] * c + hp.A[0][1] * s), hp.e.cy + f * (hp.A[1][0] * c + hp.A[1][1] * s));
+      }
+      const rf = AutoBoardDetector.refine(P0, dt, w, h);
+      const Hbi = homog4(AUTO_TARGETS4, [0, 1, 2, 3].map(i => ({ x: rf.P[2 * i], y: rf.P[2 * i + 1] })));
+      if (!Hbi) continue;
+      const fp = AutoBoardDetector.finalPattern(Hbi, sm, w, h);
+      if (!best || fp > best.fp + 1e-9 || (Math.abs(fp - best.fp) <= 1e-9 && rf.cost < best.cost)) best = { Hbi, fp, cost: rf.cost, lad: hp.lad, R: hp.R, rho: hp.rho };
+    }
+    return best;
+  }
+
+  static downscale(media, srcW, srcH, w, h) {
+    if (w >= srcW && h >= srcH) {
+      const out = document.createElement('canvas'); out.width = srcW; out.height = srcH;
+      const g = out.getContext('2d'); g.drawImage(media, 0, 0, srcW, srcH);
+      return out;
+    }
+    let cur = media, cw = srcW, ch = srcH;
+    while (cw / 2 >= w * 1.4) {
+      const c = document.createElement('canvas'); c.width = Math.round(cw / 2); c.height = Math.round(ch / 2);
+      const g = c.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(cur, 0, 0, c.width, c.height);
+      cur = c; cw = c.width; ch = c.height;
+    }
+    const out = document.createElement('canvas'); out.width = w; out.height = h;
+    const g = out.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(cur, 0, 0, w, h);
+    return out;
+  }
+
+  static pass(cv, media, srcW, srcH, width, lowResBoost = false) {
+    const w = Math.min(width, srcW), h = Math.max(1, Math.round(srcH * w / srcW)), minD = Math.min(w, h);
+    const canvas = AutoBoardDetector.downscale(media, srcW, srcH, w, h);
+    const mats = []; const M = m => (mats.push(m), m);
+    try {
+      const rgba = M(cv.imread(canvas)), gray = M(new cv.Mat());
+      cv.cvtColor(rgba, gray, cv.COLOR_RGBA2GRAY);
+      if (lowResBoost && typeof cv.createCLAHE === 'function') {
+        const clahe = cv.createCLAHE(2.0, new cv.Size(8, 8));
+        clahe.apply(gray, gray);
+        clahe.delete();
+      }
+      const blurK = w <= 420 ? 3 : 5;
+      cv.GaussianBlur(gray, gray, new cv.Size(blurK, blurK), 0);
+      const e0 = M(new cv.Mat());
+      cv.Canny(gray, e0, lowResBoost ? 28 : 40, lowResBoost ? 95 : 120);
+      const ed = M(new cv.Mat()), lad = M(new cv.Mat()), inv = M(new cv.Mat()), dtm = M(new cv.Mat());
+      cv.dilate(e0, ed, M(cv.Mat.ones(3, 3, cv.CV_8U)));
+      cv.dilate(e0, lad, M(cv.Mat.ones(lowResBoost ? 9 : 7, lowResBoost ? 9 : 7, cv.CV_8U)));
+      cv.bitwise_not(ed, inv); cv.distanceTransform(inv, dtm, cv.DIST_L2, 3);
+
+      const contours = M(new cv.MatVector()), hier = M(new cv.Mat());
+      cv.findContours(ed, contours, hier, cv.RETR_LIST, cv.CHAIN_APPROX_NONE);
+      const lens = [];
+      for (let i = 0; i < contours.size(); i++) { const c = contours.get(i); lens.push([i, c.rows]); c.delete(); }
+      lens.sort((p, q) => q[1] - p[1]);
+      const cands = [];
+      const minRows = (lowResBoost ? 0.35 : 0.48) * minD;
+      for (const [i, rows] of lens.slice(0, 30)) {
+        if (rows < minRows) break;
+        const c = contours.get(i);
+        try {
+          const rr = cv.fitEllipse(c), a = rr.size.width / 2, b = rr.size.height / 2;
+          if (Math.min(a, b) > 0.07 * minD && Math.max(a, b) < 1.05 * minD && Math.min(a, b) / Math.max(a, b) > 0.32) {
+            const ang = rr.angle * Math.PI / 180, ca = Math.cos(ang), sa = Math.sin(ang), d = c.data32S, bins = new Array(36).fill(0);
+            let err = 0;
+            const tol = lowResBoost ? 0.08 : 0.06;
+            for (let k = 0; k < d.length; k += 2) {
+              const dx = d[k] - rr.center.x, dy = d[k + 1] - rr.center.y;
+              const u = (dx * ca + dy * sa) / a, v = (-dx * sa + dy * ca) / b, r = Math.hypot(u, v);
+              err += Math.abs(r - 1);
+              if (Math.abs(r - 1) < tol) bins[Math.floor(((Math.atan2(v, u) + Math.PI) / (2 * Math.PI)) * 36) % 36] = 1;
+            }
+            const fit = Math.max(0, 1 - (err / (d.length / 2)) / tol), score = fit * bins.reduce((x, y) => x + y, 0) / 36;
+            if (score > (lowResBoost ? 0.11 : 0.15)) cands.push({ cx: rr.center.x, cy: rr.center.y, a, b, ang, score });
+          }
+        } finally { c.delete(); }
+      }
+      const res = AutoBoardDetector.analyze({ w, h, sm: gray.data, lad: lad.data, dt: dtm.data32F, cands });
+      return res && { ...res, w, h, srcW, srcH, width };
+    } finally { mats.forEach(m => { try { m.delete(); } catch (_) {} }); }
+  }
+
+  static stations(ring = 120, spokes = [30, 45, 60, 75, 85, 115, 125, 135, 145, 152]) {
+    const key = ring + ':' + spokes.join(','); AutoBoardDetector._st = AutoBoardDetector._st || {};
+    if (AutoBoardDetector._st[key]) return AutoBoardDetector._st[key];
+    const bx = [], by = [], nx = [], ny = [];
+    for (const rm of [99, 107, 162, 170]) for (let k = 0; k < ring; k++) {
+      const t = 2 * Math.PI * k / ring, r = rm * AUTO_K;
+      bx.push(BOARD.cx + r * Math.cos(t)); by.push(BOARD.cy + r * Math.sin(t)); nx.push(Math.cos(t)); ny.push(Math.sin(t));
+    }
+    for (let k = 0; k < 20; k++) {
+      const t = (9 + 18 * k - 90) * Math.PI / 180;
+      for (const rm of spokes) {
+        const r = rm * AUTO_K;
+        bx.push(BOARD.cx + r * Math.cos(t)); by.push(BOARD.cy + r * Math.sin(t)); nx.push(-Math.sin(t)); ny.push(Math.cos(t));
+      }
+    }
+    return (AutoBoardDetector._st[key] = { n: bx.length, bx, by, nx, ny });
+  }
+
+  static project(P, X, Y) {
+    const H = homog4(AUTO_TARGETS4, [0, 1, 2, 3].map(i => ({ x: P[2 * i], y: P[2 * i + 1] })));
+    if (!H) return null;
+    const n = X.length, xs = new Float64Array(n), ys = new Float64Array(n);
+    for (let i = 0; i < n; i++) {
+      const q = H[2][0] * X[i] + H[2][1] * Y[i] + H[2][2];
+      xs[i] = (H[0][0] * X[i] + H[0][1] * Y[i] + H[0][2]) / q; ys[i] = (H[1][0] * X[i] + H[1][1] * Y[i] + H[1][2]) / q;
+    }
+    return { xs, ys };
+  }
+
+  static bilinear(g, w, h, x, y) {
+    x = Math.min(Math.max(x, 0), w - 1.001); y = Math.min(Math.max(y, 0), h - 1.001);
+    const x0 = x | 0, y0 = y | 0, fx = x - x0, fy = y - y0, i = y0 * w + x0;
+    return g[i] * (1 - fx) * (1 - fy) + g[i + 1] * fx * (1 - fy) + g[i + w] * (1 - fx) * fy + g[i + w + 1] * fx * fy;
+  }
+
+  static measure(gray, gw, gh, P, S, win = 3, step = 0.25, minGrad = 6) {
+    const n = S.n;
+    const p = AutoBoardDetector.project(P, S.bx, S.by);
+    const q = AutoBoardDetector.project(P, S.bx.map((v, i) => v + 0.5 * S.nx[i]), S.by.map((v, i) => v + 0.5 * S.ny[i]));
+    if (!p || !q) return null;
+    const res = new Float64Array(n).fill(NaN), nxi = new Float64Array(n), nyi = new Float64Array(n), sg = new Float64Array(n);
+    const M = Math.round(2 * win / step) + 1, mg = Math.max(2, Math.round(0.5 / step)), prof = new Float64Array(M), d = new Float64Array(M);
+    for (let i = 0; i < n; i++) {
+      let dx = q.xs[i] - p.xs[i], dy = q.ys[i] - p.ys[i]; const L = Math.hypot(dx, dy);
+      if (!(L > 1e-9)) continue;
+      dx /= L; dy /= L; nxi[i] = dx; nyi[i] = dy;
+      for (let j = 0; j < M; j++) { const t = -win + j * step; prof[j] = AutoBoardDetector.bilinear(gray, gw, gh, p.xs[i] + t * dx, p.ys[i] + t * dy); }
+      d[0] = Math.abs(prof[1] - prof[0]) / step; d[M - 1] = Math.abs(prof[M - 1] - prof[M - 2]) / step;
+      for (let j = 1; j < M - 1; j++) d[j] = Math.abs(prof[j + 1] - prof[j - 1]) / (2 * step);
+      let jm = 0; for (let j = 1; j < M; j++) if (d[j] > d[jm]) jm = j;
+      if (jm < mg || jm > M - 1 - mg || d[jm] < minGrad) continue;
+      const a = d[jm - 1], b = d[jm], c = d[jm + 1], den = a - 2 * b + c;
+      res[i] = -win + jm * step + (Math.abs(den) > 1e-9 ? 0.5 * (a - c) / den : 0) * step;
+      sg[i] = Math.sign(prof[jm + 1] - prof[jm - 1]);
+    }
+    return { p, nx: nxi, ny: nyi, res, sg };
+  }
+
+  static solveLin(A, b) {
+    const n = b.length, M = A.map((r, i) => [...r, b[i]]);
+    for (let c = 0; c < n; c++) {
+      let p = c; for (let r = c + 1; r < n; r++) if (Math.abs(M[r][c]) > Math.abs(M[p][c])) p = r;
+      if (Math.abs(M[p][c]) < 1e-12) return null;
+      [M[c], M[p]] = [M[p], M[c]];
+      for (let r = c + 1; r < n; r++) { const f = M[r][c] / M[c][c]; for (let k = c; k <= n; k++) M[r][k] -= f * M[c][k]; }
+    }
+    const x = new Array(n);
+    for (let i = n - 1; i >= 0; i--) { let s = M[i][n]; for (let k = i + 1; k < n; k++) s -= M[i][k] * x[k]; x[i] = s / M[i][i]; }
+    return x;
+  }
+
+  static subpixel(gray, gw, gh, P0, opts = {}) {
+    const iters = opts.iters || 6, sc = Math.max(0.75, gw / 1280), win0 = opts.win || 3.2 * sc, step0 = opts.step || 0.25;
+    const minOk = gw < 900 ? 55 : 85;
+    const minGrad = gw < 900 ? 3.5 : 5;
+    const S = AutoBoardDetector.stations(opts.ring || 110), med = a => { const s = [...a].sort((x, y) => x - y), n = s.length; return n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2; };
+    let P = P0.slice(), rms = NaN, nOk = 0;
+    const phases = opts.coarse === false ? [{ win: win0, step: step0, n: iters }] : [{ win: win0 * 2, step: step0 * 2, n: Math.max(2, Math.round(iters / 3)) }, { win: win0, step: step0, n: iters }];
+    for (const ph of phases) for (let it = 0; it < ph.n; it++) {
+      const m = AutoBoardDetector.measure(gray, gw, gh, P, S, ph.win, ph.step, minGrad);
+      if (!m) break;
+      const idx = []; for (let i = 0; i < S.n; i++) if (!Number.isNaN(m.res[i])) idx.push(i);
+      nOk = idx.length; if (nOk < minOk) break;
+      const r = idx.map(i => m.res[i]), md = med(r), s = 1.4826 * med(r.map(v => Math.abs(v - md))) + 1e-3;
+      rms = Math.sqrt(r.reduce((a, v) => a + v * v, 0) / r.length);
+      const wt = r.map(v => (Math.abs(v) < 2 * s ? 1 : 2 * s / Math.abs(v)));
+      const J = idx.map(() => new Float64Array(9)), dlt = 0.05;
+      for (let j = 0; j < 8; j++) {
+        const Q = P.slice(); Q[j] += dlt;
+        const pq = AutoBoardDetector.project(Q, S.bx, S.by); if (!pq) return null;
+        for (let k = 0; k < idx.length; k++) { const i = idx[k]; J[k][j] = ((pq.xs[i] - m.p.xs[i]) * m.nx[i] + (pq.ys[i] - m.p.ys[i]) * m.ny[i]) / dlt; }
+      }
+      for (let k = 0; k < idx.length; k++) J[k][8] = m.sg[idx[k]];
+      const A = Array.from({ length: 9 }, () => new Array(9).fill(0)), b = new Array(9).fill(0);
+      for (let k = 0; k < idx.length; k++) for (let a = 0; a < 9; a++) { b[a] += wt[k] * J[k][a] * r[k]; for (let c = 0; c < 9; c++) A[a][c] += wt[k] * J[k][a] * J[k][c]; }
+      for (let a = 0; a < 9; a++) A[a][a] += 1e-3;
+      const dP = AutoBoardDetector.solveLin(A, b); if (!dP) break;
+      P = P.map((v, i) => v + dP[i]);
+      if (Math.max(...dP.slice(0, 8).map(Math.abs)) < 0.01) break;
+    }
+    return { P, rms, n: nOk, minOk };
+  }
+
+  static crossings() {
+    if (AutoBoardDetector._cr) return AutoBoardDetector._cr;
+    const out = [];
+    for (const rm of [99, 107, 162, 170]) for (let k = 0; k < 20; k++) { const t = (9 + 18 * k - 90) * Math.PI / 180, r = rm * AUTO_K; out.push({ bx: BOARD.cx + r * Math.cos(t), by: BOARD.cy + r * Math.sin(t), ring: rm, k }); }
+    return (AutoBoardDetector._cr = out);
+  }
+
+  static crossingAt(gray, gw, gh, px, py, rad) {
+    const x0 = Math.max(1, Math.floor(px - rad)), x1 = Math.min(gw - 2, Math.ceil(px + rad)), y0 = Math.max(1, Math.floor(py - rad)), y1 = Math.min(gh - 2, Math.ceil(py + rad));
+    let a = 0, b = 0, c = 0, rx = 0, ry = 0, ws = 0;
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+      const dx = x - px, dy = y - py, dd = dx * dx + dy * dy; if (dd > rad * rad) continue;
+      const gx = (gray[y * gw + x + 1] - gray[y * gw + x - 1]) / 2, gy = (gray[(y + 1) * gw + x] - gray[(y - 1) * gw + x]) / 2, m2 = gx * gx + gy * gy;
+      if (m2 < 1) continue;
+      const w = m2 * Math.exp(-dd / (rad * rad));
+      const nxx = gx * gx / m2, nxy = gx * gy / m2, nyy = gy * gy / m2;
+      a += w * nxx; b += w * nxy; c += w * nyy; rx += w * (nxx * x + nxy * y); ry += w * (nxy * x + nyy * y); ws += w;
+    }
+    if (ws <= 0) return null;
+    const det = a * c - b * b, tr = a + c;
+    if (det < 0.025 * tr * tr) return null;
+    return { x: (c * rx - b * ry) / det, y: (a * ry - b * rx) / det, strength: det / (tr * tr) };
+  }
+
+  static fitCrossings(gray, gw, gh, Hb, opts = {}) {
+    const c0 = Homography.apply(Hb, BOARD.cx, BOARD.cy), c1 = Homography.apply(Hb, BOARD.cx + 10, BOARD.cy);
+    const pxPerMm = Math.hypot(c1.x - c0.x, c1.y - c0.y) / 10 * (BOARD.rOuter / 170);
+    const rad = Math.min(7, Math.max(2.5, 3.0 * pxPerMm)), maxShift = Math.max(2.5, 2.6 * pxPerMm);
+    const minNeeded = gw < 900 ? 16 : 24;
+    const cr = AutoBoardDetector.crossings(), src = [], dst = [];
+    for (const c of cr) {
+      const p = Homography.apply(Hb, c.bx, c.by);
+      if (!(p.x > rad && p.y > rad && p.x < gw - rad && p.y < gh - rad)) continue;
+      const q = AutoBoardDetector.crossingAt(gray, gw, gh, p.x, p.y, rad);
+      if (!q || Math.hypot(q.x - p.x, q.y - p.y) > maxShift) continue;
+      src.push({ x: q.x, y: q.y }); dst.push({ x: c.bx, y: c.by });
+    }
+    if (src.length < minNeeded) return null;
+    let idx = src.map((_, i) => i), H = null;
+    for (let it = 0; it < 4; it++) {
+      H = Homography.solveLeastSquares(idx.map(i => src[i]), idx.map(i => dst[i])); if (!H) return null;
+      const e = src.map((p, i) => { const q = Homography.apply(H, p.x, p.y); return Math.hypot(q.x - dst[i].x, q.y - dst[i].y); });
+      const ev = idx.map(i => e[i]).sort((a, b) => a - b), med = ev[ev.length >> 1], mad = ev.map(v => Math.abs(v - med)).sort((a, b) => a - b)[ev.length >> 1] * 1.4826 + 0.02;
+      const keep = src.map((_, i) => i).filter(i => e[i] <= med + 2.5 * mad + 0.05);
+      if (keep.length === idx.length || keep.length < minNeeded) { idx = keep.length < minNeeded ? idx : keep; break; }
+      idx = keep;
+    }
+    H = Homography.solveLeastSquares(idx.map(i => src[i]), idx.map(i => dst[i]));
+    const e = idx.map(i => { const q = Homography.apply(H, src[i].x, src[i].y); return Math.hypot(q.x - dst[i].x, q.y - dst[i].y); });
+    return { Hcb: H, n: idx.length, found: src.length, rms: Math.sqrt(e.reduce((s, v) => s + v * v, 0) / e.length) };
+  }
+
+  static blur(src, w, h, sigma = 1) {
+    const r = Math.max(1, Math.ceil(3 * sigma)), k = new Float64Array(2 * r + 1); let sum = 0;
+    for (let i = -r; i <= r; i++) { k[i + r] = Math.exp(-(i * i) / (2 * sigma * sigma)); sum += k[i + r]; }
+    for (let i = 0; i < k.length; i++) k[i] /= sum;
+    const tmp = new Float32Array(w * h), out = new Float32Array(w * h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { let s = 0; for (let t = -r; t <= r; t++) s += k[t + r] * src[y * w + Math.min(w - 1, Math.max(0, x + t))]; tmp[y * w + x] = s; }
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { let s = 0; for (let t = -r; t <= r; t++) s += k[t + r] * tmp[Math.min(h - 1, Math.max(0, y + t)) * w + x]; out[y * w + x] = s; }
+    return out;
+  }
+
+  static makeGray(media, srcW, srcH, maxW = 1600) {
+    const gw = Math.min(srcW, maxW), gh = Math.max(1, Math.round(srcH * gw / srcW));
+    const c = AutoBoardDetector.downscale(media, srcW, srcH, gw, gh), d = c.getContext('2d').getImageData(0, 0, gw, gh).data, g = new Float32Array(gw * gh);
+    for (let i = 0; i < g.length; i++) g[i] = 0.299 * d[4 * i] + 0.587 * d[4 * i + 1] + 0.114 * d[4 * i + 2];
+    const sigma = gw <= 720 ? 0.65 : Math.max(0.85, gw / 1280);
+    return { gray: AutoBoardDetector.blur(g, gw, gh, sigma), gw, gh };
+  }
+
+  static async detect(media, cfg, progress = () => {}) {
+    const srcW = media.videoWidth || media.naturalWidth, srcH = media.videoHeight || media.naturalHeight;
+    if (!srcW || !srcH) throw new Error('kein Bild vorhanden');
+    const isLowRes = Math.max(srcW, srcH) < 1920;
+    const level = AUTO_LEVELS[2], pause = () => new Promise(r => setTimeout(r, 0));
+    progress('OpenCV wird geladen (einmalig) …');
+    const { cv } = await loadOpenCV(cfg.opencvUrl);
+    const t0 = performance.now(); let best = null;
+
+    const candidateWidths = [...new Set([
+      ...level.widths.filter(w => w <= srcW),
+      Math.min(srcW, 480),
+      srcW
+    ])].filter(w => w >= 240).sort((a, b) => a - b);
+
+    for (const width of candidateWidths) {
+      progress(`Suche Board (${width} px) …`); await pause();
+      const r = AutoBoardDetector.pass(cv, media, srcW, srcH, width, isLowRes);
+      if (r && (!best || r.fp > best.fp)) best = r;
+      if (best && best.fp >= Math.max(0.76, level.minFp)) break;
+    }
+
+    if ((!best || best.fp < 0.25) && !isLowRes) {
+      for (const width of [400, 640]) {
+        progress(`Kontrast-Suche (${width} px) …`); await pause();
+        const r = AutoBoardDetector.pass(cv, media, srcW, srcH, width, true);
+        if (r && (!best || r.fp > best.fp)) best = r;
+        if (best && best.fp >= 0.45) break;
+      }
+    }
+
+    if (!best || best.fp < 0.24) return null;
+    const uncertain = best.fp < level.minFp;
+    const toSrc = (H, gw, gh) => CALIB_TARGETS.map(t => { const p = Homography.apply(H, t.x, t.y); return { x: p.x * srcW / gw, y: p.y * srcH / gh }; });
+    let points = toSrc(best.Hbi, best.w, best.h), refined = false, crossings = 0;
+    if (level.sub) {
+      progress('Verfeinere auf Subpixel …'); await pause();
+      const { gray, gw, gh } = AutoBoardDetector.makeGray(media, srcW, srcH, Math.min(srcW, level.sub.maxW));
+      const P0 = AUTO_TARGETS4.flatMap(t => { const p = Homography.apply(best.Hbi, t.x, t.y); return [p.x * gw / best.w, p.y * gh / best.h]; });
+      const sp = AutoBoardDetector.subpixel(gray, gw, gh, P0, level.sub);
+      const shift = sp ? Math.max(...sp.P.map((v, i) => Math.abs(v - P0[i]))) : Infinity;
+      if (sp && sp.n >= sp.minOk && shift < 0.08 * gw) {
+        refined = true;
+        const Hb = homog4(AUTO_TARGETS4, [0, 1, 2, 3].map(i => ({ x: sp.P[2 * i], y: sp.P[2 * i + 1] })));
+        let ptsA = toSrc(Hb, gw, gh);
+        if (level.cross) {
+          progress('Prüfe alle Drahtkreuzungen …'); await pause();
+          const fc = AutoBoardDetector.fitCrossings(gray, gw, gh, Hb), Hb2 = fc && Homography.invert(fc.Hcb);
+          if (Hb2) {
+            const ptsB = toSrc(Hb2, gw, gh);
+            const pxmm0 = pxPerMmFromAnchors(ptsA);
+            const dev = ptsA.reduce((s, p, i) => s + Math.hypot(p.x - ptsB[i].x, p.y - ptsB[i].y), 0) / ptsA.length / pxmm0;
+            if (dev < (isLowRes ? 2.2 : 1.5)) { ptsA = ptsA.map((p, i) => ({ x: (p.x + ptsB[i].x) / 2, y: (p.y + ptsB[i].y) / 2 })); crossings = fc.n; }
+          }
+        }
+        points = ptsA;
+      }
+    }
+    const pxPerMm = pxPerMmFromAnchors(points);
+    const confidence = Math.min(1, 0.55 * best.fp + 0.45 * Math.min(1, best.lad / 0.72));
+    return { points, fp: best.fp, confidence, width: best.width, ms: Math.round(performance.now() - t0), refined, crossings, pxPerMm, uncertain };
+  }
+}
+function loadOpenCV(url) {
+  if (window.__cvReady) return window.__cvReady;
+  const p = new Promise((resolve, reject) => {
+    const t0 = Date.now(); let called = false, failed = false;
+    let s = document.querySelector('script[data-opencv]') || [...document.scripts].find(x => x.src === url);
+    if (window.__cvScriptFailed) { if (s) s.remove(); s = null; window.__cvScriptFailed = false; }
+    if (!s) {
+      s = document.createElement('script'); s.src = url; s.async = true; s.dataset.opencv = '1';
+      s.addEventListener('error', () => { failed = true; });
+      document.head.appendChild(s);
+    } else s.addEventListener('error', () => { failed = true; });
+    const poll = () => {
+      const c = window.cv;
+      if (c && c.Mat) return resolve({ cv: c });
+      if (failed) return reject(new Error('OpenCV.js konnte nicht geladen werden'));
+      if (c && !called) {
+        if (typeof c === 'function') { called = true; Promise.resolve(c()).then(m => { window.cv = m; }, reject); }
+        else if (c instanceof Promise) { called = true; c.then(m => { window.cv = m; }, reject); }
+      }
+      if (Date.now() - t0 > 120000) return reject(new Error('OpenCV.js Zeitüberschreitung'));
+      setTimeout(poll, 100);
+    };
+    poll();
+  });
+  window.__cvReady = p; p.catch(() => { window.__cvReady = null; });
+  return p;
+}
+</script>
+<script>
+const $=id=>document.getElementById(id),MAXD=3,I={A:[[1,0],[0,1]],b:[0,0]},SECT=[20,1,18,4,13,6,10,15,2,17,3,19,7,16,8,11,14,9,12,5],GW=320;
+const ds=[],nets={1:null,2:null},refs={};let SCR='data',busy=false,calEdit=false,pool=[],cur=-1,tool='tip',drag=null,active=1,training=false,stopF=false,hist={t:[],v:[]},calMode=false,calPts=[];
+const cnv=$('cv'),cx=cnv.getContext('2d'),tc=document.createElement('canvas');
+const log=m=>{$('bar').textContent=m;const d=document.createElement('div');d.textContent=`[${new Date().toLocaleTimeString('de-DE')}] ${m}`;$('log').append(d);$('log').scrollTop=1e9};
+const done=it=>it?it.darts.filter(d=>d.tip&&d.flight):[],clamp=v=>Math.max(0,Math.min(1,v));
+const DESC={1:'<b>Apex:</b> sieht das ganze Bild und erzeugt Heatmaps für Spitzen und Flights (bis 3 Darts). Bekommt zusätzlich Board-Koordinaten aus der 19-Punkt-Kalibrierung (Blickwinkel &amp; Lage), falls vorhanden.',2:'<b>Sniper:</b> bekommt einen Crop um einen Dart aus dem Originalbild (volle Auflösung) und verfeinert Spitze und Flight.'};
+const SIZES={1:[128,192,256],2:[64,96,128]},LNAME=['dunkel','mittel','hell'],LICO=['🌑','🌗','☀️'];
+
+/* ---------- 19 Kalibrierpunkte (wie camera_tablet.html), Board-Einheiten: Doppel-Außenrand = 1 ---------- */
+const ANC=(()=>{const a=[[0,0,'Bullseye (Mitte)']],sc=d=>SECT[(((d/18)|0)+20)%20],P=(d,r,t)=>{const q=(d-90)*Math.PI/180;a.push([r*Math.cos(q),r*Math.sin(q),t])};
+ P(9,15.9/170,'Rand Single-Bull, Richtung Draht 20|1');[9,45,81,117,153,189,225,261,297,333].forEach(d=>P(d,1,`Doppel-Außenrand, Draht ${sc(d-9)}|${sc(d+9)}`));[27,81,135,189,243,297,351].forEach(d=>P(d,107/170,`Triple-Außenrand, Draht ${sc(d-9)}|${sc(d+9)}`));return a})();
+
+/* ---------- Heatmap-Dekodierung & Hilfen (auch im Einbau-Code) ---------- */
+function peaks(h,s,ch,thr,n){const r=[];for(let y=0;y<s;y++)for(let x=0;x<s;x++){const v=h[(y*s+x)*2+ch];if(v<thr)continue;let ok=1,sw=0,sx=0,sy=0;for(let j=-1;j<=1;j++)for(let i=-1;i<=1;i++){const X=x+i,Y=y+j;if(X<0||Y<0||X>=s||Y>=s)continue;const w=h[(Y*s+X)*2+ch];if(w>v)ok=0;sw+=w;sx+=w*(X+.5);sy+=w*(Y+.5)}if(ok)r.push({x:sx/sw/s,y:sy/sw/s,v})}r.sort((a,b)=>b.v-a.v);const o=[];for(const p of r)if(o.length<n&&o.every(q=>Math.hypot(q.x-p.x,q.y-p.y)>3/s))o.push(p);return o}
+function pair(T,F){const c=[];T.forEach((t,i)=>F.forEach((f,j)=>c.push([Math.hypot(t.x-f.x,t.y-f.y),i,j])));c.sort((a,b)=>a[0]-b[0]);const ui=new Set,uj=new Set,o=[];for(const[,i,j]of c){if(ui.has(i)||uj.has(j))continue;ui.add(i);uj.add(j);o.push({tip:{x:T[i].x,y:T[i].y},flight:{x:F[j].x,y:F[j].y}})}return o}
+const hp=(h,x,y)=>{const k=h[6]*x+h[7]*y+1;return[(h[0]*x+h[1]*y+h[2])/k,(h[3]*x+h[4]*y+h[5])/k]};
+/* Zusatzkanäle: Board-Koordinaten (x,y) je Pixel + Kalibrier-Flag; Hc = Homographie Bild(0..1) → Board */
+function exCh(Hc,size,toSrc){const o=new Float32Array(size*size*3);if(!Hc)return o;let k=0;for(let j=0;j<size;j++)for(let i=0;i<size;i++){const p=toSrc((i+.5)/size,(j+.5)/size),q=hp(Hc,p.x,p.y);o[k]=q[0]*.6;o[k+1]=q[1]*.6;o[k+2]=1;k+=3}return o}
+
+/* ---------- Geometrie ---------- */
+function gs(A){for(let c=0;c<8;c++){let p=c;for(let r=c+1;r<8;r++)if(Math.abs(A[r][c])>Math.abs(A[p][c]))p=r;[A[c],A[p]]=[A[p],A[c]];for(let r=0;r<8;r++)if(r!=c){const f=A[r][c]/A[c][c];for(let k=c;k<9;k++)A[r][k]-=f*A[c][k]}}return A.map((r,i)=>r[8]/r[i]).slice(0,8)}
+function homog(S,D,ls){const A=ls?Array.from({length:8},()=>Array(9).fill(0)):[];S.forEach(([x,y],i)=>{const[X,Y]=D[i];[[[x,y,1,0,0,0,-X*x,-X*y],X],[[0,0,0,x,y,1,-Y*x,-Y*y],Y]].forEach(([r,b])=>{if(ls){for(let a=0;a<8;a++){for(let c=0;c<8;c++)A[a][c]+=r[a]*r[c];A[a][8]+=r[a]*b}}else A.push([...r,b])})});return gs(A)}
+function fitCal(pts){const S=pts.map(p=>[p.x,p.y]),D=ANC.map(a=>[a[0],a[1]]),H=homog(S,D,1),Hb=homog(D,S,1);let e=0;S.forEach((s,i)=>{const q=hp(H,s[0],s[1]);e+=Math.hypot(q[0]-D[i][0],q[1]-D[i][1])*170});return{pts,H,Hb,rms:e/S.length}}
+function seg(it,p){if(!it.cal)return'';const q=hp(it.cal.H,p.x,p.y),r=Math.hypot(q[0],q[1])*170,a=(Math.atan2(q[0],-q[1])*180/Math.PI+369)%360,n=SECT[(a/18)|0];
+ return r<6.35?'Bull':r<15.9?'25':r>170?'Out':(r>=99&&r<107?'T':r>=162?'D':'S')+n}
+function mat(A,b,B,c){return{A:[[B[0][0]*A[0][0]+B[0][1]*A[1][0],B[0][0]*A[0][1]+B[0][1]*A[1][1]],[B[1][0]*A[0][0]+B[1][1]*A[1][0],B[1][0]*A[0][1]+B[1][1]*A[1][1]]],b:[B[0][0]*b[0]+B[0][1]*b[1]+c[0],B[1][0]*b[0]+B[1][1]*b[1]+c[1]]}}
+const ap=(T,p)=>[T.A[0][0]*p.x+T.A[0][1]*p.y+T.b[0],T.A[1][0]*p.x+T.A[1][1]*p.y+T.b[1]];
+const inv=(T,q)=>{const[[a,b],[c,d]]=T.A,det=a*d-b*c,x=q[0]-T.b[0],y=q[1]-T.b[1];return{x:(d*x-b*y)/det,y:(-c*x+a*y)/det}};
+function baseT(it,m,tip,fl,jit){
+ if(m==1)return I;const W=it.img.naturalWidth,H=it.img.naturalHeight;
+ const len=Math.hypot((tip.x-fl.x)*W,(tip.y-fl.y)*H);let side=Math.max(len*1.6,.06*Math.max(W,H)),x=(tip.x+fl.x)/2*W,y=(tip.y+fl.y)/2*H;
+ if(jit){x+=(Math.random()-.5)*.3*side;y+=(Math.random()-.5)*.3*side;side*=.85+.35*Math.random()}
+ const sx=side/W,sy=side/H;return{A:[[1/sx,0],[0,1/sy]],b:[.5-x/W/sx,.5-y/H/sy]}}
+function withAug(T){const r=Math.random,S=$('augs').value==='2',a=S?(r()*2-1)*Math.PI:(r()-.5)*.35,s=S?.7+.6*r():.85+.3*r(),f=r()<.5?-1:1,co=s*Math.cos(a),si=s*Math.sin(a),B=[[f*co,-f*si],[si,co]],q=S?.5:.1,t=[(r()-.5)*q,(r()-.5)*q];
+ return mat(T.A,T.b,B,[.5-(B[0][0]+B[0][1])/2+t[0],.5-(B[1][0]+B[1][1])/2+t[1]])}
+function render(it,T,size){tc.width=tc.height=size;const x=tc.getContext('2d'),W=it.img.naturalWidth,H=it.img.naturalHeight,{A,b}=T;
+ x.fillStyle='#000';x.fillRect(0,0,size,size);x.setTransform(size*A[0][0]/W,size*A[1][0]/W,size*A[0][1]/H,size*A[1][1]/H,size*b[0],size*b[1]);x.drawImage(it.img,0,0);return tc}
+function heat(tips,fls,hs){const h=new Float32Array(hs*hs*2),sg=1.5;[tips,fls].forEach((P,ch)=>P.forEach(([u,v])=>{const px=u*hs-.5,py=v*hs-.5;
+ for(let y=Math.max(0,Math.floor(py-4));y<=Math.min(hs-1,Math.ceil(py+4));y++)for(let x=Math.max(0,Math.floor(px-4));x<=Math.min(hs-1,Math.ceil(px+4));x++){const g=Math.exp(-((x-px)**2+(y-py)**2)/(2*sg*sg)),i=(y*hs+x)*2+ch;if(g>h[i])h[i]=g}}));return h}
+
+/* ---------- Trainingsdaten (nur TRAIN-Bilder, nie TEST) ---------- */
+function units(m,split){const u=[];ds.filter(i=>i.split===split&&!i.auto).forEach(it=>{const d=done(it);if(m==1){if(d.length)u.push({it})}else d.forEach(q=>u.push({it,d:q}))});return u}
+function sample(u,m,size,stride,aug){const it=u.it;let T=baseT(it,m,u.d&&u.d.tip,u.d&&u.d.flight,aug),g=[1,1,1],o=0;
+ if(aug){T=withAug(T);const gb=.7+.6*Math.random();g=[0,0,0].map(()=>gb*(.9+.2*Math.random()));o=(Math.random()-.5)*.2}
+ const c=render(it,T,size),L=m==1?done(it):[u.d],P=k=>L.map(q=>ap(T,q[k])),ex={tip:[],flight:[]};
+ if(aug&&m==1&&$('cp').checked&&pool.length)for(let n=Math.random()*3|0;n>0;n--)paste(c,size,ex);
+ const x=tf.browser.fromPixels(c);
+ let tp=P('tip').concat(ex.tip),fl=P('flight').concat(ex.flight),hI=null;const pj=aug?+$('persp').value:0;
+ if(pj>0){const S=[[0,0],[size,0],[size,size],[0,size]],R=()=>(Math.random()*2-1)*pj*size,D=S.map(([a,b])=>[a+R(),b+R()]),hF=homog(S,D),mp=p=>hp(hF,p[0]*size,p[1]*size).map(v=>v/size);hI=homog(D,S);tp=tp.map(mp);fl=fl.map(mp)}
+ const Hc=it.cal&&(!aug||Math.random()>.25)?it.cal.H:null,e=exCh(Hc,size,(a,b)=>{let X=a*size,Y=b*size;if(hI)[X,Y]=hp(hI,X,Y);return inv(T,[X/size,Y/size])});
+ return{x,g,o,hI,e,n:aug,h:heat(tp,fl,size/stride)}}
+function paste(c,size,ex){const q=pool[Math.random()*pool.length|0],it=q.it,W=it.img.naturalWidth,H=it.img.naturalHeight,t=q.d.tip,f=q.d.flight,
+ len=Math.hypot((t.x-f.x)*W,(t.y-f.y)*H),side=Math.max(len*1.6,.06*Math.max(W,H))*1.2,mx=(t.x+f.x)/2*W,my=(t.y+f.y)/2*H,
+ a=Math.random()*6.283,k=size/Math.sqrt(W*H)*(.8+.4*Math.random()),dx=size*(.12+.76*Math.random()),dy=size*(.12+.76*Math.random()),x=c.getContext('2d');
+ x.save();x.setTransform(1,0,0,1,0,0);x.translate(dx,dy);x.rotate(a);x.scale(k,k);x.translate(-mx,-my);x.beginPath();x.arc(mx,my,side/2,0,7);x.clip();x.drawImage(it.img,0,0);x.restore();
+ const tr=p=>{const X=(p.x*W-mx)*k,Y=(p.y*H-my)*k;return[(dx+X*Math.cos(a)-Y*Math.sin(a))/size,(dy+X*Math.sin(a)+Y*Math.cos(a))/size]};
+ ex.tip.push(tr(t));ex.flight.push(tr(f))}
+function pack(S,hs){const B=S.length,xs=tf.tidy(()=>{let x=tf.stack(S.map(s=>s.x)).toFloat().div(255);const z=x.shape[1];if(S.some(s=>s.hI))x=tf.image.transform(x,tf.tensor2d(S.map(s=>s.hI||[1,0,0,0,1,0,0,0]),[B,8]),'bilinear','constant',0);
+ x=x.mul(tf.tensor(S.flatMap(s=>s.g),[B,1,1,3])).add(tf.tensor4d(S.map(s=>s.o),[B,1,1,1]));if(S[0].n)x=x.add(tf.randomNormal(x.shape,0,.02));x=x.clipByValue(0,1);
+ const E=new Float32Array(B*z*z*3);S.forEach((s,i)=>E.set(s.e,i*z*z*3));return tf.concat([x,tf.tensor4d(E,[B,z,z,3])],3)});
+ S.forEach(s=>s.x.dispose());const a=new Float32Array(B*hs*hs*2);S.forEach((s,i)=>a.set(s.h,i*hs*hs*2));return{xs,ys:tf.tensor4d(a,[B,hs,hs,2])}}
+
+/* ---------- Modell ---------- */
+const wLoss=(yt,yp)=>tf.mean(tf.mul(tf.square(tf.sub(yt,yp)),tf.add(1,tf.mul(yt,30))));
+function build(size,pools,lr){const i=tf.input({shape:[size,size,6]});let x=i;
+ const c=f=>{x=tf.layers.conv2d({filters:f,kernelSize:3,padding:'same',activation:'relu'}).apply(x)},p=()=>{x=tf.layers.maxPooling2d({poolSize:2}).apply(x)};
+ c(16);p();c(32);if(pools>1)p();c(48);c(48);const f=x;
+ p();c(64);c(64);c(64);x=tf.layers.upSampling2d({size:[2,2]}).apply(x);x=tf.layers.concatenate().apply([x,f]);c(48);c(32); // grober Pfad = großes Sichtfeld, ohne Dilation (TF.js kann Dilation nicht trainieren)
+ const o=tf.layers.conv2d({filters:2,kernelSize:1,padding:'same',activation:'sigmoid'}).apply(x),m=tf.model({inputs:i,outputs:o});
+ m.compile({optimizer:tf.train.adam(lr),loss:wLoss});return m}
+const shuf=a=>{for(let i=a.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[a[i],a[j]]=[a[j],a[i]]}};
+function chart(){const c=$('chart'),x=c.getContext('2d');x.clearRect(0,0,c.width,c.height);const all=[...hist.t,...hist.v.filter(v=>v!=null)];if(!all.length)return;const mx=Math.max(...all),n=hist.t.length;
+ [[hist.t,'#00ff88'],[hist.v,'#ffd43b']].forEach(([a,col])=>{x.strokeStyle=col;x.beginPath();let st=0;a.forEach((v,i)=>{if(v==null)return;const X=n>1?i/(n-1)*c.width:0,Y=c.height-v/mx*(c.height-8)-4;st?x.lineTo(X,Y):x.moveTo(X,Y);st=1});x.stroke()})}
+
+async function trainModel(m,size){
+ const stride=m==1?4:2,hs=size/stride,lr=+$('lr').value||.002,E=+$('ep').value||40,B=+$('bs').value||8,aug=$('aug').checked;
+ const tr=units(m,'train'),va=units(m,'val'),skip=ds.filter(i=>i.auto&&done(i).length).length;
+ pool=ds.filter(i=>i.split==='train'&&!i.auto).flatMap(it=>done(it).map(d=>({it,d})));
+ if(tr.length<4)return log(`Zu wenig Trainingsdaten (${tr.length}). Empfohlen: mindestens ~20 Bilder bzw. Darts.`);
+ training=true;stopF=false;hist={t:[],v:[]};updateUI();
+ let net;
+ if($('cont').checked&&nets[m]&&nets[m].size===size&&nets[m].net.inputs[0].shape[3]==6&&!nets[m].net.layers.some(l=>l.dilationRate&&l.dilationRate[0]>1)){net=nets[m].net;net.compile({optimizer:tf.train.adam(lr),loss:wLoss})}
+ else{if(nets[m])nets[m].net.dispose();net=build(size,m==1?2:1,lr)}
+ nets[m]={net,size,stride};
+ log(`Training ${m==1?'Apex':'Sniper'}: ${tr.length} Train-Einheiten, ${va.length} Test-Einheiten (nur zur Bewertung)${skip?`, ${skip} ungeprüfte Auto-Bilder ausgeschlossen`:''}, ${net.countParams()} Parameter, Backend ${tf.getBackend()}.`);
+ try{for(let e=0;e<E&&!stopF;e++){
+  shuf(tr);let sum=0,n=0;
+  for(let i=0;i<tr.length;i+=B){const S=tr.slice(i,i+B).map(u=>sample(u,m,size,stride,aug)),{xs,ys}=pack(S,hs),l=await net.trainOnBatch(xs,ys);xs.dispose();ys.dispose();sum+=l*S.length;n+=S.length;await tf.nextFrame()}
+  let vl=null;if(va.length){let vs=0,vn=0;for(let i=0;i<va.length;i+=B){const S=va.slice(i,i+B).map(u=>sample(u,m,size,stride,false)),{xs,ys}=pack(S,hs),t=net.evaluate(xs,ys,{batchSize:B});vs+=(await t.data())[0]*S.length;vn+=S.length;t.dispose();xs.dispose();ys.dispose()}vl=vs/vn}
+  hist.t.push(sum/n);hist.v.push(vl);chart();$('status').textContent=`Epoche ${e+1}/${E} · Loss ${(sum/n).toFixed(5)}${vl!=null?' · Test '+vl.toFixed(5):''}`;
+  if((e+1)%5==0||e==0)log($('status').textContent)}
+  log(stopF?'Training gestoppt.':'Training abgeschlossen.')}
+ catch(err){log('Trainingsfehler: '+err.message)}
+ training=false;updateUI()}
+$('b-train').onclick=()=>trainModel(active,+$('size').value);
+$('b-trainall').onclick=async()=>{await trainModel(1,SIZES[1][0]);if(!stopF)await trainModel(2,SIZES[2][0])};
+$('b-stop').onclick=()=>{stopF=true};
+
+/* ---------- Inferenz ---------- */
+async function runNet(m,it,T){const{net,size,stride}=nets[m],c=render(it,T,size),ex=net.inputs[0].shape[3]==6?tf.tensor4d(exCh(it.cal&&it.cal.H,size,(u,v)=>inv(T,[u,v])),[1,size,size,3]):null;
+ const h=tf.tidy(()=>{let x=tf.browser.fromPixels(c).toFloat().div(255).expandDims(0);if(ex)x=tf.concat([x,ex],3);return net.predict(x)}),d=await h.data();h.dispose();if(ex)ex.dispose();return{d,hs:size/stride}}
+async function refine(it,dt){const T=baseT(it,2,dt.tip,dt.flight,false),{d,hs}=await runNet(2,it,T),t=peaks(d,hs,0,.1,1)[0],f=peaks(d,hs,1,.1,1)[0];
+ return t&&f?{tip:inv(T,[t.x,t.y]),flight:inv(T,[f.x,f.y])}:dt}
+async function pipeline(it){let r;
+ if(nets[1]){const o=await runNet(1,it,I),th=+$('thr').value;r=pair(peaks(o.d,o.hs,0,th,MAXD),peaks(o.d,o.hs,1,th,MAXD))}
+ else r=done(it).map(d=>({tip:{...d.tip},flight:{...d.flight}}));
+ if(nets[2])for(let i=0;i<r.length;i++)r[i]=await refine(it,r[i]);return r}
+$('b-pred').onclick=async()=>{const it=ds[cur];if(!it||(!nets[1]&&!nets[2]))return;
+ it.preds=await pipeline(it);log(`${it.preds.length} Dart(s) erkannt (${nets[1]?'Apex':'Annotation'}${nets[2]?' + Sniper':''}).`);draw()};
+$('b-take').onclick=()=>{const it=ds[cur];if(it&&it.preds&&it.preds.length){it.darts=it.preds.slice(0,MAXD).map(p=>({tip:{...p.tip},flight:{...p.flight}}));it.preds=[];it.auto=true;updateUI();log('Vorschlag übernommen – prüfen/korrigieren, dann ✔ Geprüft.')}};
+$('b-eval').onclick=async()=>{if(!nets[1]&&!nets[2])return;let items=ds.filter(i=>i.split==='val'&&!i.auto&&done(i).length);
+ if(!items.length)return log('Kein TEST-Bild mit Annotation. Test-Bilder markieren (TEST oder Auto-Split).');
+ let gt=0,hit=0,fp=0,et=0,ef=0;const by=[0,1,2].map(()=>({g:0,h:0}));
+ for(const it of items){const W=it.img.naturalWidth,H=it.img.naturalHeight,P=await pipeline(it),used=new Set,bc=by[it.lc];
+  for(const g of done(it)){gt++;bc.g++;let b=-1,bd=1e9;P.forEach((p,i)=>{const e=Math.hypot((p.tip.x-g.tip.x)*W,(p.tip.y-g.tip.y)*H);if(!used.has(i)&&e<bd){bd=e;b=i}});
+   if(b>=0&&bd<.04*Math.max(W,H)){used.add(b);hit++;bc.h++;et+=bd;ef+=Math.hypot((P[b].flight.x-g.flight.x)*W,(P[b].flight.y-g.flight.y)*H)}}
+  fp+=P.length-used.size}
+ log(`TEST (${items.length} Bilder, nie trainiert): ${hit}/${gt} Darts gefunden (${(100*hit/Math.max(1,gt)).toFixed(0)} %), ${fp} Fehlalarme, Ø Spitzenfehler ${(et/Math.max(1,hit)).toFixed(1)} px, Ø Flightfehler ${(ef/Math.max(1,hit)).toFixed(1)} px.`);
+ by.forEach((v,i)=>v.g&&log(`   ${LICO[i]} ${LNAME[i]}: ${v.h}/${v.g} gefunden`))};
+
+/* ---------- Export / Import Modell ---------- */
+$('b-exp').onclick=async()=>{const n=nets[active];if(!n)return;const nm=active==1?'apex-board-finder':'sniper-crop-analyzer';
+ await n.net.save('downloads://'+nm);log(`Modell "${nm}" heruntergeladen. Eingabe ${n.size}×${n.size}×6 (RGB + Board-Koordinaten), Heatmap-Stride ${n.stride}.`)};
+$('b-lm').onclick=()=>$('i-mod').click();
+$('i-mod').onchange=async e=>{const f=[...e.target.files];e.target.value='';const j=f.find(x=>/\.json$/i.test(x.name)),b=f.filter(x=>/\.bin$/i.test(x.name));
+ if(!j||!b.length)return log('Bitte model.json UND die .bin-Datei gemeinsam auswählen.');
+ try{const net=await tf.loadLayersModel(tf.io.browserFiles([j,...b])),size=net.inputs[0].shape[1],stride=size/net.outputs[0].shape[1];
+  if(nets[active])nets[active].net.dispose();nets[active]={net,size,stride};log(`Modell geladen (${size}×${size}×${net.inputs[0].shape[3]}, Stride ${stride}) für ${active==1?'Apex':'Sniper'}.`);updateUI()}
+ catch(err){log('Modellfehler: '+err.message)}};
+$('b-snip').onclick=()=>{const s=$('snip'),n=nets[active],nm=active==1?'apex-board-finder':'sniper-crop-analyzer',sz=n?n.size:128;
+ s.value=`// TF.js einbinden, Dateien ${nm}.json + ${nm}.weights.bin neben die HTML legen.\n// Modell-Eingabe: ${sz}x${sz}x6 = RGB/255 + 3 Board-Koordinaten-Kanäle (Ganzbild gestaucht, Apex).\n// Hc = Homographie Bild(0..1)->Board aus der 19-Punkt-Kalibrierung (8 Werte, siehe JSON-Export "cal.H"), oder null.\nconst M=await tf.loadLayersModel('${nm}.json');\nconst hp=${hp};\n${peaks}\n${pair}\n${exCh}\nfunction detect(source,Hc=null,size=${sz},thr=.3){\n const c=document.createElement('canvas');c.width=c.height=size;c.getContext('2d').drawImage(source,0,0,size,size);\n const ex=tf.tensor4d(exCh(Hc,size,(u,v)=>({x:u,y:v})),[1,size,size,3]);\n const h=tf.tidy(()=>M.predict(tf.concat([tf.browser.fromPixels(c).toFloat().div(255).expandDims(0),ex],3)).dataSync());ex.dispose();\n const s=Math.sqrt(h.length/2);return pair(peaks(h,s,0,thr,3),peaks(h,s,1,thr,3)); // normiert 0..1\n}`;
+ s.hidden=false;s.select();navigator.clipboard&&navigator.clipboard.writeText(s.value).catch(()=>{});log('Einbau-Code kopiert.')};
+
+/* ---------- Mathematische Dart-Erkennung (wie camera_tablet: Differenz zum leeren Board) ---------- */
+function grayOf(img){const h=Math.round(GW*img.naturalHeight/img.naturalWidth),c=document.createElement('canvas');c.width=GW;c.height=h;const x=c.getContext('2d',{willReadFrequently:true});x.drawImage(img,0,0,GW,h);
+ const d=x.getImageData(0,0,GW,h).data,g=new Uint8Array(GW*h);for(let i=0;i<g.length;i++)g[i]=.299*d[4*i]+.587*d[4*i+1]+.114*d[4*i+2];return{g,w:GW,h}}
+function blobs(md,m0,w,h,minPx){const seen=new Uint8Array(w*h),out=[];for(let s=0;s<w*h;s++){if(!md[s]||seen[s])continue;const st=[s],px=[];seen[s]=1;
+ while(st.length){const p=st.pop();if(m0[p])px.push(p);const x=p%w,y=p/w|0;for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const X=x+dx,Y=y+dy;if(X<0||Y<0||X>=w||Y>=h)continue;const q=Y*w+X;if(md[q]&&!seen[q]){seen[q]=1;st.push(q)}}}
+ if(px.length>=minPx)out.push(px)}return out.sort((a,b)=>b.length-a.length)}
+function blobDart(px,w,h,cen){const n=px.length;let mx=0,my=0;for(const p of px){mx+=p%w;my+=p/w|0}mx/=n;my/=n;let a=0,b=0,c=0;for(const p of px){const x=p%w-mx,y=(p/w|0)-my;a+=x*x;b+=y*y;c+=x*y}
+ const th=.5*Math.atan2(2*c,a-b),ux=Math.cos(th),uy=Math.sin(th);let t0=1e9,t1=-1e9;const ts=px.map(p=>{const t=(p%w-mx)*ux+((p/w|0)-my)*uy;if(t<t0)t0=t;if(t>t1)t1=t;return t}),L=t1-t0;if(L<4)return null;
+ const nb=6,k=new Array(nb).fill(0);ts.forEach(t=>k[Math.min(nb-1,(nb*(t-t0)/L)|0)]++);const lo=(k[0]+k[1])/2,hi=(k[nb-1]+k[nb-2])/2;let tipMin=lo<hi;
+ if(cen&&Math.max(lo,hi)<1.4*Math.min(lo,hi))tipMin=Math.hypot(mx+ux*t0-cen[0],my+uy*t0-cen[1])<Math.hypot(mx+ux*t1-cen[0],my+uy*t1-cen[1]);
+ const tT=tipMin?t0:t1,tF=tipMin?t1:t0;let fx=0,fy=0,fn=0;px.forEach((p,i)=>{if(Math.abs(ts[i]-tF)<=.3*L){fx+=p%w;fy+=p/w|0;fn++}});
+ return{tip:{x:(mx+ux*tT+.5)/w,y:(my+uy*tT+.5)/h},flight:{x:(fx/fn+.5)/w,y:(fy/fn+.5)/h}}}
+function mathDetect(it){const R=refs[it.key];if(!R)return null;const a=it.g.g,b=R.g,N=a.length,w=it.g.w,h=it.g.h,hist=new Uint32Array(511);
+ for(let i=0;i<N;i++)hist[a[i]-b[i]+255]++;let med=0,acc=0;for(let k=0;k<511;k++){acc+=hist[k];if(acc*2>=N){med=k-255;break}}
+ const mh=new Uint32Array(256);for(let k=0;k<511;k++)mh[Math.min(255,Math.abs(k-255-med))]+=hist[k];let mad=0;acc=0;for(let k=0;k<256;k++){acc+=mh[k];if(acc*2>=N){mad=k;break}}
+ const thr=Math.min(45,Math.max(18,Math.ceil(4.5*1.4826*mad))),m0=new Uint8Array(N),md=new Uint8Array(N);for(let i=0;i<N;i++)if(Math.abs(a[i]-b[i]-med)>thr)m0[i]=1;
+ for(let y=0;y<h;y++)for(let x=0;x<w;x++)if(m0[y*w+x])for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const X=x+dx,Y=y+dy;if(X>=0&&Y>=0&&X<w&&Y<h)md[Y*w+X]=1}
+ const cen=it.cal?hp(it.cal.Hb,0,0).map((v,i)=>v*(i?h:w)):null,B=blobs(md,m0,w,h,12),out=[];
+ for(const px of B){if(out.length>=MAXD||px.length<Math.max(12,.15*B[0].length))break;
+  if(it.cal){let cx_=0,cy_=0;px.forEach(p=>{cx_+=p%w;cy_+=p/w|0});const q=hp(it.cal.H,cx_/px.length/w,cy_/px.length/h);if(Math.hypot(q[0],q[1])>1.35)continue}
+  const d=blobDart(px,w,h,cen);if(d)out.push(d)}
+ return out}
+$('b-ref').onclick=()=>{const it=ds[cur];if(!it)return;refs[it.key]={g:it.g.g.slice(),w:it.g.w,h:it.g.h};log(`Referenz (leeres Board) für ${it.key} gesetzt.`)};
+function medianRefs(miss){let c=0;const keys=[...new Set(ds.map(d=>d.key))];keys.forEach(k=>{if(miss&&refs[k])return;const im=ds.filter(d=>d.key===k),n=im.length;if(n<3)return log(`${k}: für den Median werden mindestens 3 Bilder benötigt.`);
+ const N=im[0].g.g.length,out=new Uint8Array(N),buf=new Uint8Array(n);for(let i=0;i<N;i++){for(let j=0;j<n;j++)buf[j]=im[j].g.g[i];buf.sort();out[i]=buf[n>>1]}
+ refs[k]={g:out,w:im[0].g.w,h:im[0].g.h};log(`Median-Hintergrund für ${k} aus ${n} Bildern berechnet.`);c++});return c}
+$('b-med').onclick=()=>medianRefs();
+$('b-math').onclick=()=>{const it=ds[cur];if(!it)return;const r=mathDetect(it);if(!r)return log('Keine Referenz für diese Bildgröße: erst „Leeres Board“ oder „Median-Hintergrund“.');it.preds=r;log(`Mathe-Erkennung: ${r.length} Dart(s) gefunden.`);draw()};
+$('b-mall').onclick=()=>{let n=0,t=0;ds.forEach(it=>{if(done(it).length||!refs[it.key])return;it.preds=mathDetect(it)||[];t++;if(it.preds.length)n++});log(`Mathe-Erkennung: ${n}/${t} unannotierte Bilder mit Vorschlag. Prüfen, dann „Alle Vorschläge übernehmen“.`);draw()};
+$('b-acc').onclick=()=>{let n=0;ds.forEach(it=>{if(!done(it).length&&it.preds&&it.preds.length){it.darts=it.preds.slice(0,MAXD);it.preds=[];it.auto=true;n++}});log(`${n} Vorschläge übernommen (Filter „Auto“). Erst nach „✔ Geprüft“ werden sie trainiert.`);updateUI()};
+$('b-chk').onclick=()=>{const it=ds[cur];if(it){it.auto=false;it.rev=true;it.preds=[];nextRev()}};
+
+/* ---------- Datensatz laden / speichern ---------- */
+async function addImg(url,name,split){const img=await new Promise((ok,no)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=no;i.src=url}),t=document.createElement('canvas');t.width=160;t.height=Math.round(160*img.naturalHeight/img.naturalWidth);t.getContext('2d').drawImage(img,0,0,t.width,t.height);
+ const g=grayOf(img);let s=0,q=0;for(const v of g.g){s+=v;q+=v*v}const mu=s/g.g.length;ds.push({name,url,img,th:t.toDataURL('image/jpeg',.7),g,mu,sd:Math.sqrt(q/g.g.length-mu*mu),key:img.naturalWidth+'x'+img.naturalHeight,split,lc:1,darts:[],preds:[],cal:null,auto:false,rev:false})}
+function applyAnn(list){let n=0;list.forEach(a=>{const it=ds.find(d=>d.name===a.name&&!d.darts.length);if(it){it.split=a.split||it.split;it.darts=(a.darts||[]).slice(0,MAXD);it.auto=!!a.auto;it.rev=!it.auto&&(a.darts||[]).length>0;if(a.cal&&a.cal.pts&&a.cal.pts.length==19)it.cal=fitCal(a.cal.pts);n++}});return n}
+const annList=()=>ds.filter(d=>done(d).length||d.cal).map(d=>({name:d.name,split:d.split,auto:d.auto,darts:done(d),cal:d.cal&&{pts:d.cal.pts,H:d.cal.H,rms:d.cal.rms}}));
+const dl=(blob,name)=>{const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click()};
+$('b-zip').onclick=()=>$('i-zip').click();$('b-imgs').onclick=()=>$('i-imgs').click();$('b-json').onclick=()=>$('i-json').click();
+$('i-zip').onchange=async e=>{const f=e.target.files[0];if(!f)return;e.target.value='';
+ try{const z=await JSZip.loadAsync(f);let n=0,ann=null;
+  for(const p of Object.keys(z.files).sort()){const E=z.files[p];if(E.dir)continue;
+   if(/annotations\.json$/i.test(p))ann=JSON.parse(await E.async('string'));
+   else if(/\.(jpe?g|png|webp)$/i.test(p)){await addImg(URL.createObjectURL(await E.async('blob')),p.split('/').pop(),/(^|\/)(val|test)(\/|$)/i.test(p)?'val':'train');n++}}
+  const a=ann?applyAnn(ann):0;if(cur<0&&ds.length)cur=0;log(`${n} Bilder aus ZIP geladen${ann?`, ${a} Annotationen übernommen`:''}.`);updateUI()}
+ catch(err){log('ZIP-Fehler: '+err.message)}};
+$('i-imgs').onchange=async e=>{const f=[...e.target.files];e.target.value='';for(const x of f)await addImg(URL.createObjectURL(x),x.name,ds.length%5==4?'val':'train');if(cur<0&&ds.length)cur=0;log(`${f.length} Bilder geladen (Gesamt ${ds.length}).`);updateUI()};
+$('i-json').onchange=async e=>{const f=e.target.files[0];if(!f)return;e.target.value='';try{log(`${applyAnn(JSON.parse(await f.text()))} Annotationen aus JSON übernommen.`);updateUI()}catch(err){log('JSON-Fehler: '+err.message)}};
+$('b-ejson').onclick=()=>{dl(new Blob([JSON.stringify(annList(),null,2)],{type:'application/json'}),'annotations.json')};
+$('b-ezip').onclick=async()=>{const z=new JSZip();log('ZIP wird erstellt …');
+ for(const it of ds){const c=document.createElement('canvas');c.width=it.img.naturalWidth;c.height=it.img.naturalHeight;c.getContext('2d').drawImage(it.img,0,0);
+  z.file(`images/${it.split==='val'?'val':'train'}/${it.name}`,await new Promise(r=>c.toBlob(r,'image/jpeg',.95)))}
+ z.file('annotations.json',JSON.stringify(annList(),null,2));dl(await z.generateAsync({type:'blob'}),`dart-dataset-${Date.now()}.zip`);log('ZIP exportiert.')};
+$('b-split').onclick=()=>{lightClasses();[0,1,2].forEach(c=>ds.filter(d=>d.lc===c).sort((a,b)=>a.mu-b.mu).forEach((d,i)=>{d.split=i%5==4?'val':'train'}));log('Auto-Split: je Lichtklasse jedes 5. Bild (gleichmäßig über die Helligkeit) als TEST, der Rest TRAIN.');updateUI()};
+function lightClasses(){const n=ds.length,s=ds.map(d=>d.mu).sort((a,b)=>a-b),t1=s[Math.floor(n/3)],t2=s[Math.floor(2*n/3)];ds.forEach(d=>{d.lc=n<3?1:d.mu<t1?0:d.mu<t2?1:2})}
+
+/* ---------- Annotation UI ---------- */
+function setTool(t){tool=t;$('m-tip').classList.toggle('on',t=='tip');$('m-fl').classList.toggle('on',t=='flight')}
+$('m-tip').onclick=()=>setTool('tip');$('m-fl').onclick=()=>setTool('flight');
+$('s-tr').onclick=()=>{if(ds[cur]){ds[cur].split='train';updateUI()}};$('s-va').onclick=()=>{if(ds[cur]){ds[cur].split='val';updateUI()}};
+$('b-clr').onclick=()=>{if(ds[cur]){ds[cur].darts=[];ds[cur].preds=[];updateUI()}};
+$('b-prev').onclick=()=>{if(cur>0){cur--;updateUI()}};$('b-next').onclick=()=>{if(cur<ds.length-1){cur++;updateUI()}};
+$('b-del').onclick=()=>{if(cur<0)return;ds.splice(cur,1);cur=ds.length?Math.min(cur,ds.length-1):-1;updateUI()};
+$('b-cal').onclick=()=>{if(cur<0)return;calMode=!calMode;calEdit=false;calPts=[];updateUI()};
+$('b-calx').onclick=()=>{if(ds[cur]){ds[cur].cal=null;updateUI()}};
+$('b-calall').onclick=()=>{const it=ds[cur];if(!it||!it.cal)return;let n=0;ds.forEach(d=>{if(d.key===it.key){d.cal=it.cal;n++}});log(`Kalibrierung auf ${n} Bilder (${it.key}) übertragen – gilt für feste Kameras.`);updateUI()};
+$('flt').onchange=()=>updateUI();$('ovl').onchange=()=>draw();
+addEventListener('keydown',e=>{if(/INPUT|SELECT|TEXTAREA|BUTTON/.test(e.target.tagName)||SCR!=='edit')return;if(e.key==='Enter'){$('b-chk').click();return}
+ if(e.key==='ArrowLeft')$('b-prev').click();else if(e.key==='ArrowRight')$('b-next').click();
+ else if(e.key==='Delete'||e.key==='Backspace'){if(calMode){calPts.pop();updateUI()}else if(ds[cur]){ds[cur].darts.pop();ds[cur].preds=[];ds[cur].auto=false;ds[cur].rev=true;updateUI()}}});
+cnv.onpointerdown=e=>{if(cur<0)return;const r=cnv.getBoundingClientRect(),x=clamp((e.clientX-r.left)/r.width),y=clamp((e.clientY-r.top)/r.height),it=ds[cur];
+ if(calMode){calPts.push({x,y});if(calPts.length==19){it.cal=fitCal(calPts);calMode=false;log(`Kalibrierung fertig, Ø Fehler ${it.cal.rms.toFixed(1)} mm (Rückprojektion).`);calPts=[]}updateUI();return}
+ if(calEdit&&it.cal){let b=-1,bd=14;it.cal.pts.forEach((p,i)=>{const q=Math.hypot((p.x-x)*r.width,(p.y-y)*r.height);if(q<bd){bd=q;b=i}});if(b>=0)drag={cal:b};return}
+ let f=null;it.darts.forEach((d,i)=>{for(const k of['tip','flight'])if(d[k]&&!f&&Math.hypot((d[k].x-x)*r.width,(d[k].y-y)*r.height)<11)f={i,k}});
+ if(f){drag=f;return}
+ it.preds=[];it.auto=false;it.rev=true;const open=it.darts.find(d=>d.tip&&!d.flight);
+ if(tool==='tip'){if(open)open.tip={x,y};else{if(it.darts.length>=MAXD)return log('Maximal 3 Darts pro Bild.');it.darts.push({tip:{x,y},flight:null})}setTool('flight')}
+ else{const t=open||it.darts[it.darts.length-1];if(t)t.flight={x,y};setTool('tip')}
+ updateUI()};
+cnv.onpointermove=e=>{if(!drag)return;const r=cnv.getBoundingClientRect(),p={x:clamp((e.clientX-r.left)/r.width),y:clamp((e.clientY-r.top)/r.height)},it=ds[cur];
+ if(drag.cal!=null){const c=it.cal;c.pts[drag.cal]=p;const n=fitCal(c.pts);n.conf=c.conf;it.cal=n}else{it.darts[drag.i][drag.k]=p;it.auto=false;it.rev=true}draw()};
+addEventListener('pointerup',()=>{if(drag){drag=null;updateUI()}});
+
+function mk(x,y,col,t,s){cx.beginPath();cx.arc(x,y,3*s,0,7);cx.fillStyle=col;cx.fill();cx.lineWidth=1.2*s;cx.strokeStyle='#fff';cx.stroke();
+ if(t){cx.font=`600 ${10*s}px sans-serif`;cx.lineWidth=2.5*s;cx.strokeStyle='#000c';cx.fillStyle='#fff';cx.strokeText(t,x+5*s,y-4*s);cx.fillText(t,x+5*s,y-4*s)}}
+function draw(){const it=ds[cur];if(!it){cnv.width=640;cnv.height=480;cx.fillStyle='#8a8d9b';cx.font='15px sans-serif';cx.textAlign='center';cx.fillText('Bilder oder ZIP laden, um zu starten',320,240);return}
+ const W=it.img.naturalWidth,H=it.img.naturalHeight;if(cnv.width!==W||cnv.height!==H){cnv.width=W;cnv.height=H}cx.drawImage(it.img,0,0);const s=Math.max(1,W/640);
+ if(it.cal&&$('ovl').checked){cx.strokeStyle='rgba(120,200,255,.6)';cx.lineWidth=1*s;[6.35,15.9,99,107,162,170].forEach(r=>{cx.beginPath();for(let k=0;k<=72;k++){const t=k*Math.PI/36,q=hp(it.cal.Hb,r/170*Math.cos(t),r/170*Math.sin(t));k?cx.lineTo(q[0]*W,q[1]*H):cx.moveTo(q[0]*W,q[1]*H)}cx.stroke()})}
+ calPts.forEach((p,i)=>mk(p.x*W,p.y*H,'#ffd43b',''+(i+1),s));
+ if(calEdit&&it.cal)it.cal.pts.forEach((p,i)=>mk(p.x*W,p.y*H,'#ffd43b',''+(i+1),s));
+ const line=(d,col,dash)=>{cx.strokeStyle=col;cx.lineWidth=1.2*s;cx.setLineDash(dash?[5*s,3*s]:[]);cx.beginPath();cx.moveTo(d.tip.x*W,d.tip.y*H);cx.lineTo(d.flight.x*W,d.flight.y*H);cx.stroke();cx.setLineDash([])};
+ it.darts.forEach((d,i)=>{if(d.tip&&d.flight)line(d,'rgba(255,220,0,.85)',1);if(d.tip)mk(d.tip.x*W,d.tip.y*H,'#ff4757','S'+(i+1)+' '+seg(it,d.tip),s);if(d.flight)mk(d.flight.x*W,d.flight.y*H,'#4dabf7','F'+(i+1),s)});
+ (it.preds||[]).forEach((p,i)=>{line(p,'#00ff88');mk(p.tip.x*W,p.tip.y*H,'#00ff88','V'+(i+1)+' '+seg(it,p.tip),s);mk(p.flight.x*W,p.flight.y*H,'#ffd43b','',s)})}
+
+function drawCov(){const c=$('cov'),x=c.getContext('2d'),R=68,X=75,Y=75;x.clearRect(0,0,150,150);x.strokeStyle='rgba(255,255,255,.25)';x.lineWidth=1;
+ [6.35,15.9,99,107,162,170].forEach(r=>{x.beginPath();x.arc(X,Y,r/170*R,0,7);x.stroke()});for(let k=0;k<20;k++){const t=(9+18*k-90)*Math.PI/180;x.beginPath();x.moveTo(X+15.9/170*R*Math.cos(t),Y+15.9/170*R*Math.sin(t));x.lineTo(X+R*Math.cos(t),Y+R*Math.sin(t));x.stroke()}
+ ds.forEach(it=>{if(!it.cal||it.auto)return;done(it).forEach(d=>{const q=hp(it.cal.H,d.tip.x,d.tip.y);x.fillStyle=it.split==='val'?'#ffd43b':'#00ff88';x.beginPath();x.arc(X+q[0]*R,Y+q[1]*R,2.5,0,7);x.fill()})})}
+
+function setModel(m){active=m;$('t1').classList.toggle('on',m==1);$('t2').classList.toggle('on',m==2);$('desc').innerHTML=DESC[m];
+ $('size').innerHTML=SIZES[m].map(v=>`<option${v==(nets[m]?nets[m].size:SIZES[m][0])?' selected':''}>${v}</option>`).join('');updateUI()}
+$('t1').onclick=()=>!training&&setModel(1);$('t2').onclick=()=>!training&&setModel(2);
+
+function updateUI(){
+ lightClasses();const it=ds[cur],ok=d=>done(d).length&&!d.auto,tr=ds.filter(d=>d.split==='train'&&ok(d)).length,va=ds.filter(d=>d.split==='val'&&ok(d)).length,nd=ds.reduce((a,d)=>a+(d.auto?0:done(d).length),0),nc=ds.filter(d=>d.cal).length;
+ $('n-tr').textContent=tr;$('n-va').textContent=va;$('n-d').textContent=nd;$('n-c').textContent=nc;
+ const lc=[0,1,2].map(c=>ds.filter(d=>d.lc===c).length),mus=ds.map(d=>d.mu);$('light').textContent=ds.length?`Licht (Ø Pixelhelligkeit ${Math.min(...mus).toFixed(0)}–${Math.max(...mus).toFixed(0)}): ${LICO[0]} ${lc[0]} · ${LICO[1]} ${lc[1]} · ${LICO[2]} ${lc[2]}`:'';
+ $('cnt').textContent=it?`Bild ${cur+1}/${ds.length} · ${it.name} · ${LICO[it.lc]} Ø${it.mu.toFixed(0)} · ${it.split==='val'?'TEST':'TRAIN'}${it.rev?' · ✔ geprüft':it.auto?' · ⚙ Vorschlag':''}`:'Keine Bilder';
+ if(it){$('slot').textContent=`Dart ${Math.min(MAXD,done(it).length+1)}/${MAXD}`;$('s-tr').classList.toggle('on',it.split==='train');$('s-va').classList.toggle('on',it.split==='val')}
+ $('cal').textContent=calMode?`Kalibrierung: Punkt ${calPts.length+1}/19 – ${ANC[calPts.length][2]} (Entf = zurück)`:it&&it.cal?(calEdit?'Punkte ziehen zum Korrigieren · ':'')+(it.cal.conf!=null?`Auto-Kalibrierung (Konfidenz ${Math.round(it.cal.conf*100)} %)`:'Manuell kalibriert')+` · Ø Fehler ${it.cal.rms.toFixed(1)} mm`:'Nicht kalibriert – „Auto“ klicken oder 19 Punkte setzen.';
+ $('b-cal').classList.toggle('on',calMode);$('b-cedit').classList.toggle('on',calEdit);
+ $('prog').textContent=`Geprüft ${ds.filter(d=>d.rev).length}/${ds.length}`;const N=!!nets[active],any=!!(nets[1]||nets[2]);
+ $('b-prev').disabled=cur<=0;$('b-next').disabled=cur<0||cur>=ds.length-1;$('b-del').disabled=cur<0;$('b-ezip').disabled=$('b-ejson').disabled=!ds.length;
+ $('b-train').disabled=$('b-trainall').disabled=training||!nd;$('b-stop').disabled=!training;$('b-pred').disabled=!any||cur<0||training;$('b-take').disabled=!any||cur<0;$('b-eval').disabled=!any||training||!va;$('b-exp').disabled=!N||training;$('b-snip').disabled=!N;
+ const f=$('flt').value,gal=$('gal');gal.innerHTML='';
+ ds.forEach((d,i)=>{if(f=='unrev'&&d.rev||f=='train'&&d.split!='train'||f=='val'&&d.split!='val'||f=='none'&&done(d).length||f=='auto'&&!d.auto||/^[012]$/.test(f)&&d.lc!=+f)return;
+  const e=document.createElement('div');e.className='th'+(i==cur?' cur':'');
+  e.innerHTML=`<img src="${d.th}">`+done(d).map(q=>`<i style="left:${q.tip.x*100}%;top:${q.tip.y*100}%;background:#ff4757"></i><i style="left:${q.flight.x*100}%;top:${q.flight.y*100}%;background:#4dabf7"></i>`).join('')+
+  `<div><span style="color:${d.split=='val'?'#ffd43b':'#00ff88'}">${d.split=='val'?'TEST':'TRAIN'} ${LICO[d.lc]}</span><span>${d.rev?'✔':d.auto?'⚙':''}${d.cal?'📐':''}${done(d).length}🎯</span></div>`;
+  e.onclick=()=>{cur=i;calMode=false;calEdit=false;calPts=[];go('edit')};gal.append(e)});
+ drawCov();draw()}
+
+/* ---------- Screens (Sidebar) ---------- */
+function go(s){SCR=s;document.querySelectorAll('.scr').forEach(e=>e.classList.toggle('on',e.id==='s-'+s));document.querySelectorAll('#nav [data-s]').forEach(b=>b.classList.toggle('on',b.dataset.s===s));updateUI()}
+document.querySelectorAll('#nav [data-s]').forEach(b=>b.onclick=()=>go(b.dataset.s));
+function nextRev(){let i=ds.findIndex((d,k)=>k>cur&&!d.rev);if(i<0)i=ds.findIndex(d=>!d.rev);if(i<0){log('Alle Bilder geprüft ✔');updateUI();return}cur=i;calMode=false;calEdit=false;calPts=[];updateUI()}
+$('b-nextrev').onclick=nextRev;
+
+/* ---------- Automatische Board-Kalibrierung (AutoBoardDetector aus camera_tablet.html, braucht OpenCV.js per Internet) ---------- */
+async function autoCal(it,prog){const r=await AutoBoardDetector.detect(it.img,{opencvUrl:'https://docs.opencv.org/4.x/opencv.js'},prog||(()=>{}));
+ if(!r||!r.points||r.points.length!=19)return null;const W=it.img.naturalWidth,H=it.img.naturalHeight,c=fitCal(r.points.map(p=>({x:p.x/W,y:p.y/H})));c.conf=r.confidence;return c}
+function emptiest(key){const im=ds.filter(d=>d.key===key),R=refs[key];if(!R)return im[0];let b=im[0],bs=1e18;im.forEach(d=>{let s=0;for(let i=0;i<d.g.g.length;i+=3)s+=Math.abs(d.g.g[i]-R.g[i]);if(s<bs){bs=s;b=d}});return b}
+$('b-acal').onclick=async()=>{const it=ds[cur];if(!it||busy)return;busy=true;log('Auto-Kalibrierung läuft (OpenCV.js wird einmalig geladen) …');
+ try{const c=await autoCal(it,m=>{$('cal').textContent=m});if(c){it.cal=c;calEdit=false;log(`Auto-Kalibrierung: Konfidenz ${Math.round(c.conf*100)} %. Bei Bedarf „Punkte bearbeiten“.`)}else log('Board nicht gefunden – bitte 19 Punkte manuell setzen.')}
+ catch(e){log('Auto-Kalibrierung fehlgeschlagen: '+e.message+' (OpenCV.js benötigt Internet).')}busy=false;updateUI()};
+$('b-cedit').onclick=()=>{if(ds[cur]&&ds[cur].cal){calEdit=!calEdit;calMode=false;updateUI()}};
+
+/* ---------- Alles automatisch ---------- */
+const SL=['① Hintergrund (Median)','② Board-Kalibrierung (19 Punkte)','③ Darts vorerkennen','④ TRAIN/TEST nach Licht'];
+async function autoPipe(){
+ if(busy||training)return;if(!ds.length)return log('Erst Bilder laden (ZIP oder Bilder).');busy=true;$('b-auto').disabled=true;
+ const S=$('steps').children,stp=(i,ic,t)=>{S[i].textContent=`${ic} ${SL[i]}${t?' – '+t:''}`},pause=()=>new Promise(r=>setTimeout(r,20));
+ try{
+  stp(0,'⏳');await pause();const nm=medianRefs(true);stp(0,'✅',nm?`${nm} Gruppe(n) berechnet`:'vorhanden oder zu wenige Bilder');
+  stp(1,'⏳');let ok=0,tot=0;
+  for(const k of [...new Set(ds.map(d=>d.key))]){const src=emptiest(k);tot++;stp(1,'⏳',k);await pause();
+   try{const c=await autoCal(src,m=>stp(1,'⏳',m));if(c){ds.forEach(d=>{if(d.key===k&&!d.cal)d.cal=c});ok++;log(`Auto-Kalibrierung ${k}: Konfidenz ${Math.round(c.conf*100)} %.`)}else log(`Auto-Kalibrierung ${k}: Board nicht gefunden.`)}
+   catch(e){log('Auto-Kalibrierung fehlgeschlagen: '+e.message+' (OpenCV.js benötigt Internet).');break}}
+  stp(1,ok==tot?'✅':ok?'⚠️':'❌',`${ok}/${tot} Bildgrößen kalibriert`);
+  stp(2,'⏳');await pause();let n=0,t=0,miss=0;
+  ds.forEach(it=>{if(it.rev||done(it).length)return;if(!refs[it.key]){miss++;return}t++;const r=mathDetect(it)||[];if(r.length){it.darts=r.slice(0,MAXD);it.auto=true;n++}});
+  stp(2,n?'✅':'⚠️',`${n}/${t} Bilder mit Vorschlag${miss?`, ${miss} ohne Referenz (mind. 3 Bilder je Größe oder ⭐ im Reiter Prüfen)`:''}`);
+  stp(3,'⏳');$('b-split').onclick();stp(3,'✅');
+  log('Automatik fertig. Im Reiter „Prüfen“ nur noch korrigieren und mit Enter bestätigen.')}
+ catch(e){log('Automatik-Fehler: '+e.message)}
+ busy=false;$('b-auto').disabled=false;nextRev();go('edit')}
+$('b-auto').onclick=autoPipe;
+$('b-nnall').onclick=async()=>{if(!nets[1]||busy||training)return log('Erst Apex trainieren oder laden.');busy=true;let n=0;
+ for(const it of ds){if(it.rev)continue;const p=await pipeline(it);if(p.length){it.darts=p.slice(0,MAXD).map(q=>({tip:{...q.tip},flight:{...q.flight}}));it.auto=true;n++}await tf.nextFrame()}
+ busy=false;log(`KI-Vorschläge für ${n} ungeprüfte Bilder übernommen (⚙).`);updateUI()};
+
+tf.ready().then(()=>log(`Bereit (TF.js ${tf.version.tfjs}, Backend ${tf.getBackend()}). Ablauf: Bilder laden → kalibrieren (optional) → Darts annotieren oder per Mathe-Erkennung vorschlagen → Auto-Split → Apex trainieren → Sniper trainieren.`));
+setModel(1);go('data');
+</script>
+</body>
+</html>
