@@ -1,18 +1,19 @@
 {
-  "name": "Dartly – Handy als Board-Kamera",
-  "short_name": "Dartly",
-  "start_url": "./index.html",
+  "name": "Dartly Arena",
+  "short_name": "Dartly Kamera",
+  "description": "Zentrales Steuerungs- und Analyse-Dashboard für Dartly",
+  "start_url": "index.html",
   "display": "standalone",
   "background_color": "#0a0c10",
-  "theme_color": "#00ff88",
+  "theme_color": "#0a0c10",
   "icons": [
     {
-      "src": "icon-192.png",
+      "src": "icon.png",
       "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "icon-512.png",
+      "src": "icon.png",
       "sizes": "512x512",
       "type": "image/png"
     }

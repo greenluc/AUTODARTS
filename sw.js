@@ -1,44 +1,44 @@
-const CACHE_NAME = 'dartly-cam-v1';
+const CACHE_NAME = 'dartly-v1';
 const ASSETS = [
-  './camera_stream.html',
-  './firebase_config.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js',
-  'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js',
-  'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
+  'index.html',
+  'camera_tablet.html',
+  'camera_stream.html',
+  'ai_trainer.html',
+  'manifest.json',
+  'icon.png'
 ];
 
-self.addEventListener('install', event => {
+// Installation: Dateien cachen
+self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => {
-      return cache.addAll(ASSETS).catch(err => console.warn('Cache addAll error:', err));
+    caches.open(CACHE_NAME).then((cache) => {
+      return cache.addAll(ASSETS);
     })
   );
   self.skipWaiting();
 });
 
-self.addEventListener('activate', event => {
+// Aktivierung: Alte Caches aufräumen
+self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then(keys => {
+    caches.keys().then((keys) => {
       return Promise.all(
-        keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key))
+        keys.map((key) => {
+          if (key !== CACHE_NAME) {
+            return caches.delete(key);
+          }
+        })
       );
     })
   );
-  self.claim();
+  self.clients.claim();
 });
 
-self.addEventListener('fetch', event => {
-  if (event.request.url.includes('firestore.googleapis.com') || event.request.url.includes('firebase')) {
-    return; // Netzwerk zuerst für Firebase/Signaling
-  }
+// Fetch: Anfragen abfangen und aus dem Cache bedienen
+self.addEventListener('fetch', (event) => {
   event.respondWith(
-    caches.match(event.request).then(response => {
-      return response || fetch(event.request).then(fetchResponse => {
-        return caches.open(CACHE_NAME).then(cache => {
-          cache.put(event.request, fetchResponse.clone());
-          return fetchResponse;
-        });
-      }).catch(() => caches.match('./camera_stream.html'));
+    caches.match(event.request).then((cachedResponse) => {
+      return cachedResponse || fetch(event.request);
     })
   );
 });
