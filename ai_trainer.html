@@ -19,6 +19,7 @@ h1{font-size:1.3rem;margin-bottom:10px}h2{font-size:1rem;border-bottom:1px solid
 .ac{color:var(--ac);border-color:rgba(0,255,136,.5);background:rgba(0,255,136,.14)}.dg{color:#ff8787;border-color:rgba(255,71,87,.5);background:rgba(255,71,87,.14)}.on{outline:2px solid var(--ac)}
 .cbox{background:#07090f;border:1px solid var(--bd);border-radius:10px;overflow:hidden;display:flex;justify-content:center}
 #cv{max-width:100%;max-height:66vh;width:auto;height:auto;cursor:crosshair;touch-action:none}
+#heat-modal{display:none;position:fixed;inset:0;z-index:9999;background:rgba(3,5,12,.97);padding:12px;overflow:auto}#heat-modal.open{display:flex;flex-direction:column;gap:10px}#heat-stage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;background:#05070d;border:1px solid #ffffff30;border-radius:12px;overflow:hidden}#heat-canvas{max-width:100%;max-height:calc(100vh - 145px);width:auto;height:auto;object-fit:contain}#heat-controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:center}#heat-controls input{width:130px}#heat-info{text-align:center;color:#b9c3d8;font-size:.8rem}
 select,input[type=number]{background:#171b2b;color:#fff;border:1px solid var(--bd);border-radius:6px;padding:5px 8px;width:100px}
 label{font-size:.8rem}.sm{font-size:.74rem;color:var(--gr);line-height:1.4}
 .ov{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start}.ov>div{flex:1;min-width:220px}
@@ -57,11 +58,11 @@ details summary{cursor:pointer;font-size:.8rem;color:var(--gr);margin:4px 0}deta
 <div id="steps"><div>① Hintergrund (Median)</div><div>② Board-Kalibrierung (19 Punkte)</div><div>③ Darts vorerkennen</div><div>④ TRAIN/TEST nach Licht</div></div>
 <p class="sm">Die Auto-Kalibrierung nutzt den Code aus <b>camera_tablet.html</b> und lädt einmalig OpenCV.js (Internet nötig). Für die Vorerkennung brauchst du mind. 3 Bilder je Bildgröße (Kamera fest, Darts an verschiedenen Stellen).</p></div>
 <div class="card"><h2>📥 Daten laden &amp; sichern</h2>
-<div class="row" style="justify-content:flex-start"><button class="btn ac" id="b-zip">📦 ZIP laden</button><button class="btn" id="b-imgs">🖼️ Bilder laden</button><button class="btn" id="b-json">📄 JSON laden</button><button class="btn ac" id="b-ezip">⬇️ ZIP speichern</button><button class="btn" id="b-ejson">💾 JSON speichern</button></div>
+<div class="row" style="justify-content:flex-start"><button class="btn ac" id="b-zip">📦 ZIP laden</button><button class="btn" id="b-imgs">🖼️ Bilder laden</button><button class="btn" id="b-json">📄 JSON laden</button><button class="btn" id="b-clean">🧹 Daten bereinigen</button><button class="btn ac" id="b-ezip">⬇️ ZIP speichern</button><button class="btn" id="b-ejson">💾 JSON speichern</button></div>
 <input type="file" id="i-zip" accept=".zip" hidden><input type="file" id="i-imgs" accept="image/*" multiple hidden><input type="file" id="i-json" accept=".json" hidden></div>
 <div class="card"><h2>🖼️ Galerie &amp; Übersicht</h2>
 <div class="ov"><div><div class="st"><div>TRAIN<b id="n-tr">0</b></div><div>TEST<b id="n-va">0</b></div><div>Darts<b id="n-d">0</b></div><div>kalibriert<b id="n-c">0</b></div></div>
-<p class="sm" id="light" style="margin-top:6px"></p><p class="sm">TEST-Bilder werden <b>nie</b> trainiert, nur bewertet. Hell/Mittel/Dunkel wird gleichmäßig auf TRAIN und TEST verteilt.</p></div>
+<p class="sm" id="light" style="margin-top:6px"></p><p class="sm">TEST-Bilder werden <b>nie</b> trainiert, nur bewertet. Nur mit „Geprüft“ bestätigte TRAIN-Annotationen (auch leere Boards) fließen ins Training ein. Hell/Mittel/Dunkel wird gleichmäßig auf TRAIN und TEST verteilt.</p></div>
 <div style="flex:0 0 150px"><canvas id="cov" width="150" height="150"></canvas><p class="sm">Abdeckung: <span style="color:#00ff88">TRAIN</span> <span style="color:#ffd43b">TEST</span></p></div></div>
 <div class="row"><select id="flt" style="width:auto"><option value="all">Alle Bilder</option><option value="unrev">Ungeprüft</option><option value="train">Nur TRAIN</option><option value="val">Nur TEST</option><option value="none">Ohne Annotation</option><option value="auto">Nur Vorschläge (⚙)</option><option value="0">Licht: dunkel</option><option value="1">Licht: mittel</option><option value="2">Licht: hell</option></select><button class="btn" id="b-split">🔀 Neu aufteilen nach Licht</button></div>
 <div class="gal" id="gal"></div></div>
@@ -71,45 +72,49 @@ details summary{cursor:pointer;font-size:.8rem;color:var(--gr);margin:4px 0}deta
 <div class="card"><div class="row"><span id="cnt" class="sm"></span><span id="prog" class="sm"></span></div>
 <div class="cbox"><canvas id="cv" width="640" height="480"></canvas></div>
 <div class="row"><button class="btn" id="b-prev">◀</button><button class="btn ac" id="b-chk">✔ Geprüft &amp; weiter (Enter)</button><button class="btn" id="b-nextrev">⏭ Nächstes ungeprüftes</button><button class="btn" id="b-next">▶</button></div>
-<p class="sm">Klick = Punkt setzen (Spitze → Flight), ziehen = verschieben, Entf = letzten Dart löschen, ←/→ = Bild wechseln, Enter = geprüft. Ohne Dart bestätigen = leeres Board (Negativbeispiel gegen Fehlalarme).</p></div>
+<p class="sm">Klick = Punkt setzen (Spitze → Flight), ziehen = verschieben, Entf = letzten Dart löschen, ←/→ = Bild wechseln, Enter = geprüft.</p></div>
 <div class="card">
 <h2>Annotation</h2>
 <div class="row"><div class="row"><button class="btn on" id="m-tip" style="color:#ff8787">🎯 Spitze</button><button class="btn" id="m-fl" style="color:#74c0fc">🪶 Flight</button></div><span id="slot" class="sm"></span></div>
 <div class="row"><div class="row"><button class="btn" id="s-tr">TRAIN</button><button class="btn" id="s-va">TEST</button></div><div class="row"><button class="btn dg" id="b-clr">Leeren</button><button class="btn dg" id="b-del">🗑️ Bild</button></div></div>
 <h2>Kalibrierung (19 Punkte)</h2>
-<p class="sm" id="cal"></p>
+<p class="sm" id="cal"></p><p class="sm">Kalibrierung nach camera_tablet: dieselben 19 Anker (Bull, Single-Bull-Rand, 10 Doppel-Außenpunkte, 7 Triple-Außenpunkte), OpenCV-Autodetektion, robuste Homographie mit geometrischer Verfeinerung, Ausreißerprüfung und perspektivisches Board-Overlay. Auto-Kalibrierung benötigt OpenCV.js/Internet.</p>
 <div class="row" style="justify-content:flex-start"><button class="btn ac" id="b-acal">🤖 Auto</button><button class="btn" id="b-cedit">✏️ Punkte bearbeiten</button><button class="btn" id="b-cal">🔁 Manuell neu</button><button class="btn" id="b-calall">⇉ Auf alle (gleiche Größe)</button><button class="btn dg" id="b-calx">✕</button></div>
 <label><input type="checkbox" id="ovl" checked> Board-Overlay anzeigen</label>
 <h2>Vorschläge</h2>
-<div class="row" style="justify-content:flex-start"><button class="btn ac" id="b-math">🧮 Darts erkennen (Pixeldifferenz)</button><button class="btn" id="b-pred">🔍 KI-Modell testen</button><button class="btn" id="b-take">✔ Vorschlag übernehmen</button><button class="btn" id="b-nnall">🤖 KI-Vorschläge für alle ungeprüften</button></div>
+<div class="row" style="justify-content:flex-start"><button class="btn ac" id="b-math">🧮 Darts erkennen (Pixeldifferenz)</button><button class="btn" id="b-pred">🔍 KI-Modell testen</button><button class="btn ac" id="b-heat">🌈 Heatmaps Vollbild</button><button class="btn" id="b-take">✔ Vorschlag übernehmen</button><button class="btn" id="b-nnall">🤖 KI-Vorschläge für alle ungeprüften</button></div>
 <details><summary>Erweitert (Referenz &amp; Stapel)</summary><div class="row"><button class="btn" id="b-ref">⭐ Dieses Bild = leeres Board</button><button class="btn" id="b-med">🧮 Median-Hintergrund</button><button class="btn" id="b-mall">🧮 Mathe: alle Bilder</button><button class="btn" id="b-acc">✔ Alle Vorschläge übernehmen</button></div></details>
 </div></div></section>
 
 <section class="scr" id="s-train"><div class="card">
 <h2>🧠 Modell trainieren</h2>
-<button class="btn ac big" id="b-trainall" disabled>🚀 Alles trainieren (Apex → Sniper)</button>
-<p class="sm">Trainiert beide Modelle nacheinander mit den Standardwerten, nur mit geprüften TRAIN-Bildern. Oder einzeln:</p>
-<div class="row" style="justify-content:stretch"><button class="btn on" id="t1" style="flex:1">⚡ Apex</button><button class="btn" id="t2" style="flex:1">🎯 Sniper</button></div>
+<p class="sm">Ein gemeinsames Ganzbild-Modell erkennt bis zu drei Darts gleichzeitig. Es erzeugt zwei Heatmaps: eine für die Spitzen und eine für die Flights. Die Spitzen-/Flight-Punkte werden anschließend paarweise zu Darts verbunden.</p>
+<details><summary><b>Wie das Modell arbeitet &amp; was der Fehler bedeutet</b></summary><p class="sm">Pro Trainingsbild vergleicht das Modell seine zwei Heatmaps mit den von dir geprüften Markierungen. Der <b>Loss</b> ist der gewichtete mittlere quadratische Heatmap-Fehler (MSE), kein Abstand in Pixeln oder Millimetern. Niedriger ist besser. Train-Loss misst bekannte Trainingsbilder; Validierungs-Loss misst zurückgehaltene Bilder und zeigt, ob das Modell auf neue Aufnahmen überträgt. Sinkender Train-Loss bei steigendem Validierungs-Loss ist ein Warnzeichen für Overfitting. Die eigentliche Treffergenauigkeit in Pixeln, Trefferquote und Fehlalarme werden separat im Reiter „Bewerten“ gemessen.</p><p class="sm">Ablauf: Du annotierst → lässt KI-Vorschläge anzeigen → korrigierst Spitze/Flight → klickst „Geprüft“ → nur diese bestätigten Markierungen fließen ins Training ein. KI-Vorschläge allein werden nicht automatisch als Wahrheit übernommen. So entsteht ein kontrollierter Feedback-Kreislauf.</p></details>
 <p class="sm" id="desc"></p>
 <div class="row"><label>Eingabegröße</label><select id="size"></select></div>
-<div class="row"><label>Epochen</label><input type="number" id="ep" value="60" min="1" max="500"></div>
+<div class="row"><label>Epochen</label><input type="number" id="ep" value="40" min="1" max="500"></div>
 <div class="row"><label>Batchgröße</label><input type="number" id="bs" value="8" min="1" max="64"></div>
 <div class="row"><label>Lernrate</label><input type="number" id="lr" value="0.002" step="0.0005" min="0.0001" max="0.05"></div>
 <div class="row"><label>Erkennungsschwelle</label><input type="number" id="thr" value="0.3" step="0.05" min="0.05" max="0.95"></div>
 <div class="row"><label><input type="checkbox" id="aug" checked> Augmentation (Drehen, Zoom, Spiegeln, Licht, Rauschen)</label></div>
 <div class="row"><label>Stärke</label><select id="augs" style="width:auto"><option value="2" selected>Stark (360°, ±25 % Versatz)</option><option value="1">Normal (±10°)</option></select></div>
 <div class="row"><label>Perspektive</label><select id="persp" style="width:auto"><option value="0.16" selected>Stark</option><option value="0.08">Mittel</option><option value="0">Aus</option></select></div>
-<div class="row"><label><input type="checkbox" id="cp" checked> Darts an zufällige Stellen kopieren (Apex)</label></div>
+<div class="row"><label><input type="checkbox" id="cp" checked> Darts an zufällige Stellen kopieren (Datenaugmentation)</label></div>
 <div class="row"><label><input type="checkbox" id="cont"> vorhandenes Modell weitertrainieren</label></div>
 <div class="row"><button class="btn ac" id="b-train" style="flex:1">🚀 Dieses Modell trainieren</button><button class="btn dg" id="b-stop" disabled>Stopp</button></div>
 <div class="sm" id="status">Bereit.</div>
+<div class="st" style="grid-template-columns:repeat(4,1fr)"><div>TRAIN-Loss<b id="m-train">–</b></div><div>VAL-Loss<b id="m-val">–</b></div><div>Abstand<b id="m-gap">–</b></div><div>Epoche<b id="m-epoch">0</b></div></div>
+<p class="sm" id="train-note">Warte auf Trainingsstart. Validierung wird nicht zum Lernen verwendet.</p>
 <canvas id="chart" width="400" height="90"></canvas>
-<div class="sm"><span style="color:#00ff88">━ Train-Loss</span> &nbsp; <span style="color:#ffd43b">━ Test-Loss</span></div>
+<div class="sm"><span style="color:#00ff88">━ Train-Loss</span> &nbsp; <span style="color:#ffd43b">━ Validierungs-Loss</span></div>
 </div></section>
 
 <section class="scr" id="s-model"><div class="card">
 <h2>📊 Bewerten</h2>
-<div class="row" style="justify-content:flex-start"><button class="btn ac" id="b-eval">📊 Test-Set bewerten</button><button class="btn" id="b-tune">🎚️ Schwelle automatisch</button></div>
+<p class="sm">Objektmetriken werden ausschließlich auf bestätigten TEST-Bildern berechnet, die nicht zum Training verwendet wurden.</p>
+<div class="st" style="grid-template-columns:repeat(4,1fr)"><div>Präzision<b id="ev-prec">–</b></div><div>Recall<b id="ev-rec">–</b></div><div>F1<b id="ev-f1">–</b></div><div>Fehlalarme<b id="ev-fp">–</b></div></div>
+<p class="sm" id="eval-note">Noch keine Testauswertung ausgeführt.</p>
+<div class="row" style="justify-content:flex-start"><button class="btn ac" id="b-eval">📊 Test-Set bewerten</button></div>
 <h2>⬇️ Speichern &amp; einsetzen</h2>
 <div class="row" style="justify-content:flex-start"><button class="btn ac" id="b-exp">⬇️ Modell herunterladen</button><button class="btn" id="b-lm">📂 Modell laden</button><button class="btn" id="b-snip">📋 Einbau-Code</button></div>
 <input type="file" id="i-mod" accept=".json,.bin" multiple hidden><textarea id="snip" hidden readonly></textarea>
@@ -117,6 +122,7 @@ details summary{cursor:pointer;font-size:.8rem;color:var(--gr);margin:4px 0}deta
 </div></section>
 
 </main></div>
+<div id="heat-modal" aria-label="Heatmap Vollbild"><div class="row"><b>🌈 Unified Dart AI – Heatmaps</b><button class="btn dg" id="b-heat-close">✕ Schließen (Esc)</button></div><div id="heat-stage"><canvas id="heat-canvas"></canvas></div><div id="heat-controls"><button class="btn ac" data-hmode="both">Beide</button><button class="btn" data-hmode="tip">🎯 Spitzen</button><button class="btn" data-hmode="flight">🪶 Flights</button><label>Deckkraft <input id="heat-alpha" type="range" min="10" max="95" value="65"></label><label><input id="heat-numbers" type="checkbox" checked> Zahlen anzeigen</label></div><div id="heat-info">Rot = hohe Modellaktivierung · Blau = niedrige Aktivierung. Zahlen zeigen Rang und Aktivierungswert.</div></div>
 <script>
 const BOARD = { size: 200, cx: 100, cy: 100, rOuter: 91 };
 const BOARD_MM = { bullseye: 6.35, singleBull: 15.9, tripleInner: 99, tripleOuter: 107, doubleInner: 162, doubleOuter: 170 };
@@ -807,12 +813,12 @@ function loadOpenCV(url) {
 </script>
 <script>
 const $=id=>document.getElementById(id),MAXD=3,I={A:[[1,0],[0,1]],b:[0,0]},SECT=[20,1,18,4,13,6,10,15,2,17,3,19,7,16,8,11,14,9,12,5],GW=320;
-const ds=[],nets={1:null,2:null},refs={};let SCR='data',busy=false,calEdit=false,pool=[],cur=-1,tool='tip',drag=null,active=1,training=false,stopF=false,hist={t:[],v:[]},calMode=false,calPts=[];
+const ds=[],nets={1:null},refs={};let SCR='data',busy=false,calEdit=false,pool=[],cur=-1,tool='tip',drag=null,active=1,training=false,stopF=false,hist={t:[],v:[]},calMode=false,calPts=[];
 const cnv=$('cv'),cx=cnv.getContext('2d'),tc=document.createElement('canvas');
 const log=m=>{$('bar').textContent=m;const d=document.createElement('div');d.textContent=`[${new Date().toLocaleTimeString('de-DE')}] ${m}`;$('log').append(d);$('log').scrollTop=1e9};
 const done=it=>it?it.darts.filter(d=>d.tip&&d.flight):[],clamp=v=>Math.max(0,Math.min(1,v));
-const DESC={1:'<b>Apex:</b> sieht das ganze Bild und erzeugt Heatmaps für Spitzen und Flights (bis 3 Darts). Bekommt zusätzlich Board-Koordinaten aus der 19-Punkt-Kalibrierung (Blickwinkel &amp; Lage), falls vorhanden.',2:'<b>Sniper:</b> bekommt einen Crop um einen Dart aus dem Originalbild (volle Auflösung) und verfeinert Spitze und Flight.'};
-const SIZES={1:[192,128,256],2:[64,96,128]},LNAME=['dunkel','mittel','hell'],LICO=['🌑','🌗','☀️'];
+const DESC={1:'<b>Unified Dart AI:</b> ein einziges Ganzbild-Modell erkennt bis zu 3 Darts gleichzeitig. Der hochauflösende Heatmap-Ausgang (Stride 2) verbindet den globalen Bildkontext mit präziser lokaler Spitzen- und Flight-Erkennung. Die 19-Punkt-Kalibrierung liefert zusätzliche Board-Koordinaten.'};
+const SIZES={1:[128,192,256]},LNAME=['dunkel','mittel','hell'],LICO=['🌑','🌗','☀️'];
 
 /* ---------- 19 Kalibrierpunkte (wie camera_tablet.html), Board-Einheiten: Doppel-Außenrand = 1 ---------- */
 const ANC=(()=>{const a=[[0,0,'Bullseye (Mitte)']],sc=d=>SECT[(((d/18)|0)+20)%20],P=(d,r,t)=>{const q=(d-90)*Math.PI/180;a.push([r*Math.cos(q),r*Math.sin(q),t])};
@@ -820,17 +826,30 @@ const ANC=(()=>{const a=[[0,0,'Bullseye (Mitte)']],sc=d=>SECT[(((d/18)|0)+20)%20
 
 /* ---------- Heatmap-Dekodierung & Hilfen (auch im Einbau-Code) ---------- */
 function peaks(h,s,ch,thr,n){const r=[];for(let y=0;y<s;y++)for(let x=0;x<s;x++){const v=h[(y*s+x)*2+ch];if(v<thr)continue;let ok=1,sw=0,sx=0,sy=0;for(let j=-1;j<=1;j++)for(let i=-1;i<=1;i++){const X=x+i,Y=y+j;if(X<0||Y<0||X>=s||Y>=s)continue;const w=h[(Y*s+X)*2+ch];if(w>v)ok=0;sw+=w;sx+=w*(X+.5);sy+=w*(Y+.5)}if(ok)r.push({x:sx/sw/s,y:sy/sw/s,v})}r.sort((a,b)=>b.v-a.v);const o=[];for(const p of r)if(o.length<n&&o.every(q=>Math.hypot(q.x-p.x,q.y-p.y)>3/s))o.push(p);return o}
-function pair(T,F){const c=[];T.forEach((t,i)=>F.forEach((f,j)=>{const d=Math.hypot(t.x-f.x,t.y-f.y);if(d>.01&&d<.6)c.push([d/Math.sqrt(t.v*f.v),i,j])}));c.sort((a,b)=>a[0]-b[0]);const ui=new Set,uj=new Set,o=[];for(const[,i,j]of c){if(ui.has(i)||uj.has(j))continue;ui.add(i);uj.add(j);o.push({tip:{x:T[i].x,y:T[i].y},flight:{x:F[j].x,y:F[j].y},v:Math.sqrt(T[i].v*F[j].v)})}return o}
-const decodeApex=(o,th)=>pair(peaks(o.d,o.hs,0,th,MAXD),peaks(o.d,o.hs,1,th,MAXD));
+function pair(T,F){const c=[];T.forEach((t,i)=>F.forEach((f,j)=>c.push([Math.hypot(t.x-f.x,t.y-f.y),i,j])));c.sort((a,b)=>a[0]-b[0]);const ui=new Set,uj=new Set,o=[];for(const[,i,j]of c){if(ui.has(i)||uj.has(j))continue;ui.add(i);uj.add(j);o.push({tip:{x:T[i].x,y:T[i].y},flight:{x:F[j].x,y:F[j].y}})}return o}
 const hp=(h,x,y)=>{const k=h[6]*x+h[7]*y+1;return[(h[0]*x+h[1]*y+h[2])/k,(h[3]*x+h[4]*y+h[5])/k]};
 /* Zusatzkanäle: Board-Koordinaten (x,y) je Pixel + Kalibrier-Flag; Hc = Homographie Bild(0..1) → Board */
-function exCh(Hc,size,toSrc){const o=new Float32Array(size*size*3);if(!Hc)return o;let k=0;for(let j=0;j<size;j++)for(let i=0;i<size;i++){const p=toSrc((i+.5)/size,(j+.5)/size),q=hp(Hc,p.x,p.y);o[k]=q[0]*.6;o[k+1]=q[1]*.6;o[k+2]=1;k+=3}return o}
+function calMap(cal,p){if(!cal)return null;if(Array.isArray(cal))return hp(cal,p.x,p.y);const W=cal.width||1,H=cal.height||1,k=cal.k1||0,px={x:p.x*W,y:p.y*H},u=k?Homography.undistort(px,k,W/2,H/2,W):px;return hp(cal.H,u.x/W,u.y/H)}
+function calUnmap(cal,p){if(!cal)return null;if(Array.isArray(cal))return hp(cal,p.x,p.y);const H=cal.Hb||Homography.invert(cal.H),q=hp(H,p.x,p.y);const W=cal.width||1,Hh=cal.height||1,k=cal.k1||0,px={x:q[0]*W,y:q[1]*Hh},d=k?Homography.distort(px,k,W/2,Hh/2,W):px;return{x:d.x/W,y:d.y/Hh}}
+function exCh(cal,size,toSrc){const o=new Float32Array(size*size*3);if(!cal)return o;let k=0;for(let j=0;j<size;j++)for(let i=0;i<size;i++){const p=toSrc((i+.5)/size,(j+.5)/size),q=calMap(cal,p);o[k]=q[0]*.6;o[k+1]=q[1]*.6;o[k+2]=1;k+=3}return o}
 
 /* ---------- Geometrie ---------- */
 function gs(A){for(let c=0;c<8;c++){let p=c;for(let r=c+1;r<8;r++)if(Math.abs(A[r][c])>Math.abs(A[p][c]))p=r;[A[c],A[p]]=[A[p],A[c]];for(let r=0;r<8;r++)if(r!=c){const f=A[r][c]/A[c][c];for(let k=c;k<9;k++)A[r][k]-=f*A[c][k]}}return A.map((r,i)=>r[8]/r[i]).slice(0,8)}
 function homog(S,D,ls){const A=ls?Array.from({length:8},()=>Array(9).fill(0)):[];S.forEach(([x,y],i)=>{const[X,Y]=D[i];[[[x,y,1,0,0,0,-X*x,-X*y],X],[[0,0,0,x,y,1,-Y*x,-Y*y],Y]].forEach(([r,b])=>{if(ls){for(let a=0;a<8;a++){for(let c=0;c<8;c++)A[a][c]+=r[a]*r[c];A[a][8]+=r[a]*b}}else A.push([...r,b])})});return gs(A)}
-function fitCal(pts){const S=pts.map(p=>[p.x,p.y]),D=ANC.map(a=>[a[0],a[1]]),H=homog(S,D,1),Hb=homog(D,S,1);let e=0;S.forEach((s,i)=>{const q=hp(H,s[0],s[1]);e+=Math.hypot(q[0]-D[i][0],q[1]-D[i][1])*170});return{pts,H,Hb,rms:e/S.length}}
-function seg(it,p){if(!it.cal)return'';const q=hp(it.cal.H,p.x,p.y),r=Math.hypot(q[0],q[1])*170,a=(Math.atan2(q[0],-q[1])*180/Math.PI+369)%360,n=SECT[(a/18)|0];
+function fitCal(pts,width=1,height=1){
+ // camera_tablet-Verfahren: radiale Objektivkorrektur (nur wenn sie den Fehler deutlich senkt),
+ // normalisierte DLT, geometrische LM-Verfeinerung und bis zu 3 Ausreißer entfernen.
+ const W=Math.max(1,width),Hh=Math.max(1,height),srcPx=pts.map(p=>({x:p.x*W,y:p.y*Hh})),dst=ANC.map(a=>({x:100+a[0]*91,y:100+a[1]*91}));
+ const k1=Homography.estimateK1(srcPx,dst,W,Hh),src=k1?srcPx.map(p=>Homography.undistort(p,k1,W/2,Hh/2,W)):srcPx;
+ const fit=Homography.fit(src,dst,{maxRms:3,minPts:7,maxDrop:3});
+ if(!fit||!fit.H)throw new Error('Kalibrierung ungültig – bitte Punkte prüfen.');
+ const H0=Homography.rescaleSource(fit.H,W,Hh),H=H0.map(r=>r.slice());
+ H[0]=H0[0].map((v,i)=>(v-100*H0[2][i])/91);H[1]=H0[1].map((v,i)=>(v-100*H0[2][i])/91);
+ const Hb=Homography.invert(H);if(!Hb)throw new Error('Homographie nicht invertierbar.');
+ const flat=M=>[M[0][0],M[0][1],M[0][2],M[1][0],M[1][1],M[1][2],M[2][0],M[2][1]];
+ return{pts,H:flat(H),Hb:flat(Hb),k1,width:W,height:Hh,rms:fit.rms,errors:fit.errors,dropped:fit.dropped,used:fit.used,worst:fit.worst,method:'camera_tablet-19pt-LM'};
+}
+function seg(it,p){if(!it.cal)return'';const q=calMap(it.cal,p),r=Math.hypot(q[0],q[1])*170,a=(Math.atan2(q[0],-q[1])*180/Math.PI+369)%360,n=SECT[(a/18)|0];
  return r<6.35?'Bull':r<15.9?'25':r>170?'Out':(r>=99&&r<107?'T':r>=162?'D':'S')+n}
 function mat(A,b,B,c){return{A:[[B[0][0]*A[0][0]+B[0][1]*A[1][0],B[0][0]*A[0][1]+B[0][1]*A[1][1]],[B[1][0]*A[0][0]+B[1][1]*A[1][0],B[1][0]*A[0][1]+B[1][1]*A[1][1]]],b:[B[0][0]*b[0]+B[0][1]*b[1]+c[0],B[1][0]*b[0]+B[1][1]*b[1]+c[1]]}}
 const ap=(T,p)=>[T.A[0][0]*p.x+T.A[0][1]*p.y+T.b[0],T.A[1][0]*p.x+T.A[1][1]*p.y+T.b[1]];
@@ -845,21 +864,20 @@ function withAug(T){const r=Math.random,S=$('augs').value==='2',a=S?(r()*2-1)*Ma
 function render(it,T,size){tc.width=tc.height=size;const x=tc.getContext('2d'),W=it.img.naturalWidth,H=it.img.naturalHeight,{A,b}=T;
  x.fillStyle='#000';x.fillRect(0,0,size,size);x.setTransform(size*A[0][0]/W,size*A[1][0]/W,size*A[0][1]/H,size*A[1][1]/H,size*b[0],size*b[1]);x.drawImage(it.img,0,0);return tc}
 function heat(tips,fls,hs){const h=new Float32Array(hs*hs*2),sg=1.5;[tips,fls].forEach((P,ch)=>P.forEach(([u,v])=>{const px=u*hs-.5,py=v*hs-.5;
- for(let y=Math.max(0,Math.floor(py-4));y<=Math.min(hs-1,Math.ceil(py+4));y++)for(let x=Math.max(0,Math.floor(px-4));x<=Math.min(hs-1,Math.ceil(px+4));x++){const g=Math.exp(-((x-px)**2+(y-py)**2)/(2*sg*sg)),i=(y*hs+x)*2+ch;if(g>h[i])h[i]=g}const X=Math.round(px),Y=Math.round(py);if(X>=0&&Y>=0&&X<hs&&Y<hs)h[(Y*hs+X)*2+ch]=1}));return h}
+ for(let y=Math.max(0,Math.floor(py-4));y<=Math.min(hs-1,Math.ceil(py+4));y++)for(let x=Math.max(0,Math.floor(px-4));x<=Math.min(hs-1,Math.ceil(px+4));x++){const g=Math.exp(-((x-px)**2+(y-py)**2)/(2*sg*sg)),i=(y*hs+x)*2+ch;if(g>h[i])h[i]=g}}));return h}
 
 /* ---------- Trainingsdaten (nur TRAIN-Bilder, nie TEST) ---------- */
-function units(m,split){const u=[];ds.filter(i=>i.split===split&&!i.auto).forEach(it=>{const d=done(it);if(m==1){if(d.length||it.rev)u.push({it})}else d.forEach(q=>u.push({it,d:q}))});return u}
+function units(m,split){const u=[];ds.filter(i=>i.split===split&&!i.auto&&i.rev).forEach(it=>{const d=done(it);if(m==1)u.push({it});else d.forEach(q=>u.push({it,d:q}))});return u}
 function sample(u,m,size,stride,aug){const it=u.it;let T=baseT(it,m,u.d&&u.d.tip,u.d&&u.d.flight,aug),g=[1,1,1],o=0;
  if(aug){T=withAug(T);const gb=.7+.6*Math.random();g=[0,0,0].map(()=>gb*(.9+.2*Math.random()));o=(Math.random()-.5)*.2}
  const c=render(it,T,size),L=m==1?done(it):[u.d],P=k=>L.map(q=>ap(T,q[k])),ex={tip:[],flight:[]};
- if(aug&&m==1&&$('cp').checked&&pool.length)for(let n=m==1&&!L.length?(Math.random()<.6?0:1):Math.random()*3|0;n>0;n--)paste(c,size,ex);
+ if(aug&&m==1&&$('cp').checked&&pool.length)for(let n=Math.random()*3|0;n>0;n--)paste(c,size,ex);
  const x=tf.browser.fromPixels(c);
  let tp=P('tip').concat(ex.tip),fl=P('flight').concat(ex.flight),hI=null;const pj=aug?+$('persp').value:0;
  if(pj>0){const S=[[0,0],[size,0],[size,size],[0,size]],R=()=>(Math.random()*2-1)*pj*size,D=S.map(([a,b])=>[a+R(),b+R()]),hF=homog(S,D),mp=p=>hp(hF,p[0]*size,p[1]*size).map(v=>v/size);hI=homog(D,S);tp=tp.map(mp);fl=fl.map(mp)}
- const Hc=it.cal&&(!aug||Math.random()>.25)?it.cal.H:null,e=exCh(Hc,size,(a,b)=>{let X=a*size,Y=b*size;if(hI)[X,Y]=hp(hI,X,Y);return inv(T,[X/size,Y/size])});
+ const Hc=it.cal&&(!aug||Math.random()>.25)?it.cal:null,e=exCh(Hc,size,(a,b)=>{let X=a*size,Y=b*size;if(hI)[X,Y]=hp(hI,X,Y);return inv(T,[X/size,Y/size])});
  return{x,g,o,hI,e,n:aug,h:heat(tp,fl,size/stride)}}
-function paste(c,size,ex){let q=pool[Math.random()*pool.length|0];for(let n=0;n<8;n++){const w_=q.it.img.naturalWidth,h_=q.it.img.naturalHeight,l_=Math.hypot((q.d.tip.x-q.d.flight.x)*w_,(q.d.tip.y-q.d.flight.y)*h_),r_=Math.max(l_*1.6,.06*Math.max(w_,h_))*.66,m_=[(q.d.tip.x+q.d.flight.x)/2*w_,(q.d.tip.y+q.d.flight.y)/2*h_];if(!done(q.it).some(o=>o!==q.d&&[o.tip,o.flight].some(p=>Math.hypot(p.x*w_-m_[0],p.y*h_-m_[1])<r_)))break;q=pool[Math.random()*pool.length|0]}
- const it=q.it,W=it.img.naturalWidth,H=it.img.naturalHeight,t=q.d.tip,f=q.d.flight,
+function paste(c,size,ex){const q=pool[Math.random()*pool.length|0],it=q.it,W=it.img.naturalWidth,H=it.img.naturalHeight,t=q.d.tip,f=q.d.flight,
  len=Math.hypot((t.x-f.x)*W,(t.y-f.y)*H),side=Math.max(len*1.6,.06*Math.max(W,H))*1.2,mx=(t.x+f.x)/2*W,my=(t.y+f.y)/2*H,
  a=Math.random()*6.283,k=size/Math.sqrt(W*H)*(.8+.4*Math.random()),dx=size*(.12+.76*Math.random()),dy=size*(.12+.76*Math.random()),x=c.getContext('2d');
  x.save();x.setTransform(1,0,0,1,0,0);x.translate(dx,dy);x.rotate(a);x.scale(k,k);x.translate(-mx,-my);x.beginPath();x.arc(mx,my,side/2,0,7);x.clip();x.drawImage(it.img,0,0);x.restore();
@@ -871,86 +889,94 @@ function pack(S,hs){const B=S.length,xs=tf.tidy(()=>{let x=tf.stack(S.map(s=>s.x
  S.forEach(s=>s.x.dispose());const a=new Float32Array(B*hs*hs*2);S.forEach((s,i)=>a.set(s.h,i*hs*hs*2));return{xs,ys:tf.tensor4d(a,[B,hs,hs,2])}}
 
 /* ---------- Modell ---------- */
-/* Focal-Loss für Heatmaps (CenterNet): scharfe Peaks, kaum Fehlalarme */
-const focal=(yt,yp)=>tf.tidy(()=>{const p=tf.clipByValue(yp,1e-4,1-1e-4),pos=tf.cast(tf.greaterEqual(yt,.999),'float32'),neg=tf.sub(1,pos),
- pl=tf.mul(tf.mul(tf.log(p),tf.square(tf.sub(1,p))),pos),nl=tf.mul(tf.mul(tf.mul(tf.log(tf.sub(1,p)),tf.square(p)),tf.pow(tf.sub(1,yt),4)),neg);
- return tf.neg(tf.div(tf.add(tf.sum(pl),tf.sum(nl)),tf.maximum(tf.sum(pos),1)))});
+const wLoss=(yt,yp)=>tf.mean(tf.mul(tf.square(tf.sub(yt,yp)),tf.add(1,tf.mul(yt,30))));
 function build(size,pools,lr){const i=tf.input({shape:[size,size,6]});let x=i;
- const c=f=>{x=tf.layers.conv2d({filters:f,kernelSize:3,padding:'same',useBias:false}).apply(x);x=tf.layers.batchNormalization({momentum:.9}).apply(x);x=tf.layers.activation({activation:'relu'}).apply(x)},p=()=>{x=tf.layers.maxPooling2d({poolSize:2}).apply(x)};
+ const c=f=>{x=tf.layers.conv2d({filters:f,kernelSize:3,padding:'same',activation:'relu'}).apply(x)},p=()=>{x=tf.layers.maxPooling2d({poolSize:2}).apply(x)};
  c(16);p();c(32);if(pools>1)p();c(48);c(48);const f=x;
- p();c(64);c(64);c(64);x=tf.layers.upSampling2d({size:[2,2]}).apply(x);x=tf.layers.concatenate().apply([x,f]);c(48);c(32); // grober Pfad = großes Sichtfeld, ohne Dilation (TF.js kann Dilation nicht trainieren)
- const o=tf.layers.conv2d({filters:2,kernelSize:1,padding:'same',activation:'sigmoid',biasInitializer:tf.initializers.constant({value:-2.2})}).apply(x),m=tf.model({inputs:i,outputs:o});
- m.compile({optimizer:tf.train.adam(lr),loss:focal});return m}
+ p();c(64);c(64);c(64);x=tf.layers.upSampling2d({size:[2,2]}).apply(x);x=tf.layers.concatenate().apply([x,f]);c(48);c(32); // globaler Kontext plus hochaufgelöster Decoder (Stride 2)
+ const o=tf.layers.conv2d({filters:2,kernelSize:1,padding:'same',activation:'sigmoid'}).apply(x),m=tf.model({inputs:i,outputs:o});
+ m.compile({optimizer:tf.train.adam(lr),loss:wLoss});return m}
 const shuf=a=>{for(let i=a.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[a[i],a[j]]=[a[j],a[i]]}};
 function chart(){const c=$('chart'),x=c.getContext('2d');x.clearRect(0,0,c.width,c.height);const all=[...hist.t,...hist.v.filter(v=>v!=null)];if(!all.length)return;const mx=Math.max(...all),n=hist.t.length;
  [[hist.t,'#00ff88'],[hist.v,'#ffd43b']].forEach(([a,col])=>{x.strokeStyle=col;x.beginPath();let st=0;a.forEach((v,i)=>{if(v==null)return;const X=n>1?i/(n-1)*c.width:0,Y=c.height-v/mx*(c.height-8)-4;st?x.lineTo(X,Y):x.moveTo(X,Y);st=1});x.stroke()})}
 
 async function trainModel(m,size){
- const stride=m==1?4:2,hs=size/stride,lr=+$('lr').value||.002,E=+$('ep').value||40,B=+$('bs').value||8,aug=$('aug').checked;
+ cleanDataset();
+ const stride=2,hs=size/stride,lr=+$('lr').value||.002,E=+$('ep').value||40,B=+$('bs').value||8,aug=$('aug').checked;
  const tr=units(m,'train'),va=units(m,'val'),skip=ds.filter(i=>i.auto&&done(i).length).length;
- pool=ds.filter(i=>i.split==='train'&&!i.auto).flatMap(it=>done(it).map(d=>({it,d})));
+ pool=ds.filter(i=>i.split==='train'&&!i.auto&&i.rev).flatMap(it=>done(it).map(d=>({it,d})));
  if(tr.length<4)return log(`Zu wenig Trainingsdaten (${tr.length}). Empfohlen: mindestens ~20 Bilder bzw. Darts.`);
  training=true;stopF=false;hist={t:[],v:[]};updateUI();
  let net;
- if($('cont').checked&&nets[m]&&nets[m].size===size&&nets[m].net.inputs[0].shape[3]==6&&nets[m].net.layers.some(l=>l.getClassName()==='BatchNormalization')){net=nets[m].net;net.compile({optimizer:tf.train.adam(lr),loss:focal})}
- else{if(nets[m])nets[m].net.dispose();net=build(size,m==1?2:1,lr)}
+ if($('cont').checked&&nets[m]&&nets[m].size===size&&nets[m].net.inputs[0].shape[3]==6&&!nets[m].net.layers.some(l=>l.dilationRate&&l.dilationRate[0]>1)){net=nets[m].net;net.compile({optimizer:tf.train.adam(lr),loss:wLoss})}
+ else{if(nets[m])nets[m].net.dispose();net=build(size,1,lr)}
  nets[m]={net,size,stride};
- log(`Training ${m==1?'Apex':'Sniper'}: ${tr.length} Train-Einheiten, ${va.length} Test-Einheiten (nur zur Bewertung)${skip?`, ${skip} ungeprüfte Auto-Bilder ausgeschlossen`:''}, ${net.countParams()} Parameter, Backend ${tf.getBackend()}.`);
- let bestS=1e9,bestE=0,bestW=null;const PAT=Math.max(15,Math.round(E*.3));
+ log(`Training Unified Dart AI: ${tr.length} bestätigte TRAIN-Einheiten, ${va.length} bestätigte VALIDIERUNGS-Einheiten (nur zur Bewertung)${skip?`, ${skip} ungeprüfte Auto-Bilder ausgeschlossen`:''}, ${net.countParams()} Parameter, Backend ${tf.getBackend()}.`);
  try{for(let e=0;e<E&&!stopF;e++){
-  shuf(tr);let sum=0,n=0;try{net.optimizer.learningRate=lr*(.05+.95*.5*(1+Math.cos(Math.PI*e/E)))}catch(_){}
+  shuf(tr);let sum=0,n=0;
   for(let i=0;i<tr.length;i+=B){const S=tr.slice(i,i+B).map(u=>sample(u,m,size,stride,aug)),{xs,ys}=pack(S,hs),l=await net.trainOnBatch(xs,ys);xs.dispose();ys.dispose();sum+=l*S.length;n+=S.length;await tf.nextFrame()}
   let vl=null;if(va.length){let vs=0,vn=0;for(let i=0;i<va.length;i+=B){const S=va.slice(i,i+B).map(u=>sample(u,m,size,stride,false)),{xs,ys}=pack(S,hs),t=net.evaluate(xs,ys,{batchSize:B});vs+=(await t.data())[0]*S.length;vn+=S.length;t.dispose();xs.dispose();ys.dispose()}vl=vs/vn}
-  hist.t.push(sum/n);hist.v.push(vl);chart();$('status').textContent=`Epoche ${e+1}/${E} · Loss ${(sum/n).toFixed(5)}${vl!=null?' · Test '+vl.toFixed(5):''}`;
-  if((e+1)%5==0||e==0)log($('status').textContent);
-  const sc=vl!=null?vl:sum/n;if(sc<bestS){bestS=sc;bestE=e;if(bestW)bestW.forEach(w=>w.dispose());bestW=net.getWeights().map(w=>w.clone())}else if(e-bestE>=PAT){log(`Early Stop: seit ${PAT} Epochen keine Verbesserung.`);break}}
-  if(bestW){net.setWeights(bestW);bestW.forEach(w=>w.dispose());log(`Beste Epoche ${bestE+1} wiederhergestellt (${va.length?'Test':'Train'}-Loss ${bestS.toFixed(5)}).`)}
-  log(stopF?'Training gestoppt.':'Training abgeschlossen.');if(m==1&&va.length&&!stopF)await tuneThr()}
+  hist.t.push(sum/n);hist.v.push(vl);chart();const gap=vl==null?null:vl-(sum/n);$('m-train').textContent=(sum/n).toFixed(5);$('m-val').textContent=vl==null?'–':vl.toFixed(5);$('m-gap').textContent=gap==null?'–':(gap>=0?'+':'')+gap.toFixed(5);$('m-epoch').textContent=String(e+1);$('train-note').textContent=vl==null?'Keine bestätigten Validierungsbilder: nur Trainings-Loss verfügbar.':(gap>0.02?'Validierungs-Loss liegt über dem Trainings-Loss – auf Overfitting achten.':gap<-.02?'Validierung aktuell besser als Training; weiter beobachten.':'Train/Validierung liegen nah beieinander.');$('status').textContent=`Epoche ${e+1}/${E} · Train-Loss ${(sum/n).toFixed(5)}${vl!=null?' · Val-Loss '+vl.toFixed(5):''}`;
+  if((e+1)%5==0||e==0)log($('status').textContent)}
+  log(stopF?'Training gestoppt.':'Training abgeschlossen.')}
  catch(err){log('Trainingsfehler: '+err.message)}
  training=false;updateUI()}
-$('b-train').onclick=()=>trainModel(active,+$('size').value);
-$('b-trainall').onclick=async()=>{await trainModel(1,SIZES[1][0]);if(!stopF)await trainModel(2,SIZES[2][0])};
+$('b-train').onclick=()=>trainModel(1,+$('size').value);
 $('b-stop').onclick=()=>{stopF=true};
 
+/* ---------- Interaktive Heatmap-Ansicht ---------- */
+let lastHeat=null,heatMode='both';
+const hm=$('heat-modal'),hcv=$('heat-canvas'),hcx=hcv.getContext('2d');
+function heatColor(v){const hue=(1-Math.max(0,Math.min(1,v)))*240;return `hsl(${hue},100%,52%)`}
+function paintHeat(){if(!lastHeat)return;const {it,d,hs}=lastHeat,W=it.img.naturalWidth,H=it.img.naturalHeight,alpha=+$('heat-alpha').value/100;
+ hcv.width=W;hcv.height=H;hcx.clearRect(0,0,W,H);hcx.drawImage(it.img,0,0,W,H);
+ const channels=heatMode==='both'?[0,1]:[heatMode==='tip'?0:1];
+ channels.forEach(ch=>{const off=document.createElement('canvas');off.width=hs;off.height=hs;const ox=off.getContext('2d'),im=ox.createImageData(hs,hs);
+ for(let y=0;y<hs;y++)for(let x=0;x<hs;x++){const v=Math.max(0,Math.min(1,d[(y*hs+x)*2+ch]));const k=(y*hs+x)*4;if(v<.08)continue;const hue=(1-v)*240,c=1,hh=hue/60,X=c*(1-Math.abs(hh%2-1));let r=0,g=0,b=0;if(hh<1)[r,g,b]=[c,X,0];else if(hh<2)[r,g,b]=[X,c,0];else if(hh<3)[r,g,b]=[0,c,X];else if(hh<4)[r,g,b]=[0,X,c];else if(hh<5)[r,g,b]=[X,0,c];else [r,g,b]=[c,0,X];im.data[k]=r*255;im.data[k+1]=g*255;im.data[k+2]=b*255;im.data[k+3]=Math.round(alpha*Math.pow(v,1.35)*220)}
+ ox.putImageData(im,0,0);hcx.imageSmoothingEnabled=true;hcx.drawImage(off,0,0,W,H);
+ const ps=peaks(d,hs,ch,.12,MAXD);if($('heat-numbers').checked)ps.forEach((q,i)=>{const x=q.x*W,y=q.y*H,label=(ch===0?'S':'F')+(i+1)+' '+Math.round(q.v*100)+'%';hcx.font=`bold ${Math.max(13,W/55)}px system-ui`;hcx.lineWidth=Math.max(3,W/400);hcx.strokeStyle='#000';hcx.fillStyle=ch===0?'#ffec99':'#d7f2ff';hcx.beginPath();hcx.arc(x,y,Math.max(10,W/100),0,Math.PI*2);hcx.fillStyle=ch===0?'#e03131':'#1971c2';hcx.globalAlpha=.9;hcx.fill();hcx.globalAlpha=1;hcx.stroke();hcx.strokeText(label,x+12,y-12);hcx.fillText(label,x+12,y-12)})
+ });
+}
+function openHeat(){const it=ds[cur];if(!it)return log('Bitte zuerst ein Bild auswählen.');if(!nets[1])return log('Bitte zuerst das Unified-Dart-AI-Modell trainieren oder laden.');
+ $('b-heat').disabled=true;log('Berechne Heatmaps …');runNet(1,it,I).then(o=>{lastHeat={it,d:o.d,hs:o.hs};hm.classList.add('open');document.body.style.overflow='hidden';paintHeat();log('Heatmaps berechnet. Rot zeigt starke Aktivierung; Zahlen zeigen Rang und Aktivierungswert.')}).catch(e=>log('Heatmap-Fehler: '+e.message)).finally(()=>$('b-heat').disabled=false)}
+function closeHeat(){hm.classList.remove('open');document.body.style.overflow=''}
+$('b-heat').onclick=openHeat;$('b-heat-close').onclick=closeHeat;$('heat-alpha').oninput=paintHeat;$('heat-numbers').onchange=paintHeat;
+document.querySelectorAll('[data-hmode]').forEach(b=>b.onclick=()=>{heatMode=b.dataset.hmode;document.querySelectorAll('[data-hmode]').forEach(q=>q.classList.toggle('ac',q===b));paintHeat()});
+addEventListener('keydown',e=>{if(e.key==='Escape'&&hm.classList.contains('open'))closeHeat()});
+
 /* ---------- Inferenz ---------- */
-async function runNet(m,it,T){const{net,size,stride}=nets[m],c=render(it,T,size),ex=net.inputs[0].shape[3]==6?tf.tensor4d(exCh(it.cal&&it.cal.H,size,(u,v)=>inv(T,[u,v])),[1,size,size,3]):null;
+async function runNet(m,it,T){const{net,size,stride}=nets[m],c=render(it,T,size),ex=net.inputs[0].shape[3]==6?tf.tensor4d(exCh(it.cal,size,(u,v)=>inv(T,[u,v])),[1,size,size,3]):null;
  const h=tf.tidy(()=>{let x=tf.browser.fromPixels(c).toFloat().div(255).expandDims(0);if(ex)x=tf.concat([x,ex],3);return net.predict(x)}),d=await h.data();h.dispose();if(ex)ex.dispose();return{d,hs:size/stride}}
-async function refine(it,dt){const T=baseT(it,2,dt.tip,dt.flight,false),{d,hs}=await runNet(2,it,T),t=peaks(d,hs,0,.1,1)[0],f=peaks(d,hs,1,.1,1)[0];
- return t&&f?{tip:inv(T,[t.x,t.y]),flight:inv(T,[f.x,f.y])}:dt}
-async function pipeline(it){let r;
- if(nets[1]){const o=await runNet(1,it,I);r=decodeApex(o,+$('thr').value)}
- else r=done(it).map(d=>({tip:{...d.tip},flight:{...d.flight}}));
- if(nets[2])for(let i=0;i<r.length;i++)r[i]=await refine(it,r[i]);return r}
-$('b-pred').onclick=async()=>{const it=ds[cur];if(!it||(!nets[1]&&!nets[2]))return;
- it.preds=await pipeline(it);log(`${it.preds.length} Dart(s) erkannt (${nets[1]?'Apex':'Annotation'}${nets[2]?' + Sniper':''}).`);draw()};
+async function pipeline(it){if(!nets[1])return done(it).map(d=>({tip:{...d.tip},flight:{...d.flight}}));
+ const o=await runNet(1,it,I),th=+$('thr').value;
+ return pair(peaks(o.d,o.hs,0,th,MAXD),peaks(o.d,o.hs,1,th,MAXD))}
+$('b-pred').onclick=async()=>{const it=ds[cur];if(!it||!nets[1])return;
+ it.preds=await pipeline(it);log(`${it.preds.length} Dart(s) mit Unified Dart AI erkannt.`);draw()};
 $('b-take').onclick=()=>{const it=ds[cur];if(it&&it.preds&&it.preds.length){it.darts=it.preds.slice(0,MAXD).map(p=>({tip:{...p.tip},flight:{...p.flight}}));it.preds=[];it.auto=true;updateUI();log('Vorschlag übernommen – prüfen/korrigieren, dann ✔ Geprüft.')}};
-function matchDarts(P,G,W,H){const used=new Set,hits=[];G.forEach(g=>{let b=-1,bd=1e9;P.forEach((p,i)=>{const e=Math.hypot((p.tip.x-g.tip.x)*W,(p.tip.y-g.tip.y)*H);if(!used.has(i)&&e<bd){bd=e;b=i}});if(b>=0&&bd<.04*Math.max(W,H)){used.add(b);hits.push({g,p:P[b],e:bd})}});return{hits,fp:P.length-used.size}}
-async function tuneThr(){if(!nets[1])return;const items=ds.filter(i=>i.split==='val'&&!i.auto&&(done(i).length||i.rev));if(!items.length)return log('Schwelle: kein geprüftes TEST-Bild vorhanden.');
- const R=[];for(const it of items){R.push({it,o:await runNet(1,it,I)});await tf.nextFrame()}
- let best=null;for(let k=18;k>=2;k--){const t=k*.05;let tp=0,fp=0,fn=0;R.forEach(({it,o})=>{const G=done(it),M=matchDarts(decodeApex(o,t),G,it.img.naturalWidth,it.img.naturalHeight);tp+=M.hits.length;fn+=G.length-M.hits.length;fp+=M.fp});
-  const pr=tp/Math.max(1,tp+fp),rc=tp/Math.max(1,tp+fn),f=1.25*pr*rc/Math.max(1e-9,.25*pr+rc);if(!best||f>best.f+1e-9)best={t,f,pr,rc,fp}}
- $('thr').value=best.t.toFixed(2);log(`Beste Erkennungsschwelle ${best.t.toFixed(2)} automatisch gesetzt: Präzision ${Math.round(best.pr*100)} %, Recall ${Math.round(best.rc*100)} %, ${best.fp} Fehlalarme auf ${items.length} TEST-Bildern.`);return best}
-$('b-tune').onclick=()=>{if(!training&&!busy)tuneThr()};
-$('b-eval').onclick=async()=>{if(!nets[1]&&!nets[2])return;const items=ds.filter(i=>i.split==='val'&&!i.auto&&(done(i).length||i.rev));
- if(!items.length)return log('Kein geprüftes TEST-Bild. Test-Bilder markieren (TEST oder Auto-Split) und prüfen (leere Bilder mit ✔ bestätigen).');
- let gt=0,hit=0,fp=0,et=0,ef=0,exact=0;const by=[0,1,2].map(()=>({n:0,x:0}));
- for(const it of items){const W=it.img.naturalWidth,H=it.img.naturalHeight,P=await pipeline(it),G=done(it),M=matchDarts(P,G,W,H),bc=by[it.lc];gt+=G.length;hit+=M.hits.length;fp+=M.fp;bc.n++;
-  M.hits.forEach(h=>{et+=h.e;ef+=Math.hypot((h.p.flight.x-h.g.flight.x)*W,(h.p.flight.y-h.g.flight.y)*H)});
-  if(P.length===G.length&&M.fp===0&&M.hits.length===G.length){exact++;bc.x++}}
- log(`TEST (${items.length} Bilder, nie trainiert): Dart-Anzahl exakt richtig in ${exact}/${items.length} Bildern · Recall ${(100*hit/Math.max(1,gt)).toFixed(0)} % (${hit}/${gt}) · Präzision ${(100*hit/Math.max(1,hit+fp)).toFixed(0)} % (${fp} Fehlalarme) · Ø Spitzenfehler ${(et/Math.max(1,hit)).toFixed(1)} px, Flight ${(ef/Math.max(1,hit)).toFixed(1)} px.`);
- by.forEach((v,i)=>v.n&&log(`   ${LICO[i]} ${LNAME[i]}: Anzahl exakt in ${v.x}/${v.n} Bildern`))};
+$('b-eval').onclick=async()=>{if(!nets[1])return;let items=ds.filter(i=>i.split==='val'&&!i.auto&&i.rev);
+ if(!items.length)return log('Keine bestätigten TEST-Bilder. Bilder als TEST markieren, annotieren und mit „Geprüft“ bestätigen.');
+ let gt=0,hit=0,fp=0;const tipErr=[],flightErr=[],by=[0,1,2].map(()=>({g:0,h:0}));
+ for(const it of items){const W=it.img.naturalWidth,H=it.img.naturalHeight,P=await pipeline(it),used=new Set,bc=by[it.lc];
+  for(const g of done(it)){gt++;bc.g++;let b=-1,bd=1e9;P.forEach((p,i)=>{const e=Math.hypot((p.tip.x-g.tip.x)*W,(p.tip.y-g.tip.y)*H);if(!used.has(i)&&e<bd){bd=e;b=i}});
+   if(b>=0&&bd<.04*Math.max(W,H)){used.add(b);hit++;bc.h++;tipErr.push(bd);flightErr.push(Math.hypot((P[b].flight.x-g.flight.x)*W,(P[b].flight.y-g.flight.y)*H))}}
+  fp+=P.length-used.size}
+ const fn=gt-hit,prec=hit/Math.max(1,hit+fp),rec=hit/Math.max(1,hit+fn),f1=2*prec*rec/Math.max(1e-9,prec+rec),mean=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:0,median=a=>{if(!a.length)return 0;const b=a.slice().sort((x,y)=>x-y);return b[Math.floor(b.length/2)]};
+ $('ev-prec').textContent=(100*prec).toFixed(1)+'%';$('ev-rec').textContent=(100*rec).toFixed(1)+'%';$('ev-f1').textContent=(100*f1).toFixed(1)+'%';$('ev-fp').textContent=String(fp);
+ $('eval-note').textContent=`${items.length} bestätigte TEST-Bilder · ${gt} echte Darts · ${hit} Treffer · ${fn} übersehene Darts · Spitzenfehler Ø ${mean(tipErr).toFixed(1)} px / Median ${median(tipErr).toFixed(1)} px · Flightfehler Ø ${mean(flightErr).toFixed(1)} px / Median ${median(flightErr).toFixed(1)} px. Treffergrenze: 4 % der längeren Bildseite.`;
+ log(`TEST-Auswertung: Precision ${(100*prec).toFixed(1)} %, Recall ${(100*rec).toFixed(1)} %, F1 ${(100*f1).toFixed(1)} %, ${fp} Fehlalarme, ${fn} übersehene Darts. Ø Spitzenfehler ${mean(tipErr).toFixed(1)} px, Ø Flightfehler ${mean(flightErr).toFixed(1)} px.`);
+ by.forEach((v,i)=>v.g&&log(`   ${LICO[i]} ${LNAME[i]}: ${v.h}/${v.g} Treffer`))};
 
 /* ---------- Export / Import Modell ---------- */
-$('b-exp').onclick=async()=>{const n=nets[active];if(!n)return;const nm=active==1?'apex-board-finder':'sniper-crop-analyzer';
+$('b-exp').onclick=async()=>{const n=nets[active];if(!n)return;const nm='unified-dart-ai';
  await n.net.save('downloads://'+nm);log(`Modell "${nm}" heruntergeladen. Eingabe ${n.size}×${n.size}×6 (RGB + Board-Koordinaten), Heatmap-Stride ${n.stride}.`)};
 $('b-lm').onclick=()=>$('i-mod').click();
 $('i-mod').onchange=async e=>{const f=[...e.target.files];e.target.value='';const j=f.find(x=>/\.json$/i.test(x.name)),b=f.filter(x=>/\.bin$/i.test(x.name));
  if(!j||!b.length)return log('Bitte model.json UND die .bin-Datei gemeinsam auswählen.');
  try{const net=await tf.loadLayersModel(tf.io.browserFiles([j,...b])),size=net.inputs[0].shape[1],stride=size/net.outputs[0].shape[1];
-  if(nets[active])nets[active].net.dispose();nets[active]={net,size,stride};log(`Modell geladen (${size}×${size}×${net.inputs[0].shape[3]}, Stride ${stride}) für ${active==1?'Apex':'Sniper'}.`);updateUI()}
+  if(nets[active])nets[active].net.dispose();nets[active]={net,size,stride};log(`Modell geladen (${size}×${size}×${net.inputs[0].shape[3]}, Stride ${stride}) für Unified Dart AI.`);updateUI()}
  catch(err){log('Modellfehler: '+err.message)}};
-$('b-snip').onclick=()=>{const s=$('snip'),n=nets[active],nm=active==1?'apex-board-finder':'sniper-crop-analyzer',sz=n?n.size:128;
- s.value=`// TF.js einbinden, Dateien ${nm}.json + ${nm}.weights.bin neben die HTML legen.\n// Modell-Eingabe: ${sz}x${sz}x6 = RGB/255 + 3 Board-Koordinaten-Kanäle (Ganzbild gestaucht, Apex).\n// Hc = Homographie Bild(0..1)->Board aus der 19-Punkt-Kalibrierung (8 Werte, siehe JSON-Export "cal.H"), oder null.\nconst M=await tf.loadLayersModel('${nm}.json');\nconst hp=${hp};\n${peaks}\n${pair}\n${exCh}\nfunction detect(source,Hc=null,size=${sz},thr=${+$('thr').value||.3}){\n const c=document.createElement('canvas');c.width=c.height=size;c.getContext('2d').drawImage(source,0,0,size,size);\n const ex=tf.tensor4d(exCh(Hc,size,(u,v)=>({x:u,y:v})),[1,size,size,3]);\n const h=tf.tidy(()=>M.predict(tf.concat([tf.browser.fromPixels(c).toFloat().div(255).expandDims(0),ex],3)).dataSync());ex.dispose();\n const s=Math.sqrt(h.length/2);return pair(peaks(h,s,0,thr,3),peaks(h,s,1,thr,3)); // normiert 0..1\n}`;
+$('b-snip').onclick=()=>{const s=$('snip'),n=nets[1],nm='unified-dart-ai',sz=n?n.size:256;
+ s.value=`// TF.js einbinden, Dateien ${nm}.json + ${nm}.weights.bin neben die HTML legen.\n// Modell-Eingabe: ${sz}x${sz}x6 = RGB/255 + 3 Board-Koordinaten-Kanäle (Ganzbild gestaucht, Unified Dart AI).\n// Hc = Homographie Bild(0..1)->Board aus der 19-Punkt-Kalibrierung (8 Werte, siehe JSON-Export "cal.H"), oder null.\nconst M=await tf.loadLayersModel('${nm}.json');\nconst hp=${hp};\n${peaks}\n${pair}\n${exCh}\nfunction detect(source,Hc=null,size=${sz},thr=.3){\n const c=document.createElement('canvas');c.width=c.height=size;c.getContext('2d').drawImage(source,0,0,size,size);\n const ex=tf.tensor4d(exCh(Hc,size,(u,v)=>({x:u,y:v})),[1,size,size,3]);\n const h=tf.tidy(()=>M.predict(tf.concat([tf.browser.fromPixels(c).toFloat().div(255).expandDims(0),ex],3)).dataSync());ex.dispose();\n const s=Math.sqrt(h.length/2);return pair(peaks(h,s,0,thr,3),peaks(h,s,1,thr,3)); // normiert 0..1\n}`;
  s.hidden=false;s.select();navigator.clipboard&&navigator.clipboard.writeText(s.value).catch(()=>{});log('Einbau-Code kopiert.')};
 
 /* ---------- Mathematische Dart-Erkennung (wie camera_tablet: Differenz zum leeren Board) ---------- */
@@ -970,9 +996,9 @@ function mathDetect(it){const R=refs[it.key];if(!R)return null;const a=it.g.g,b=
  const mh=new Uint32Array(256);for(let k=0;k<511;k++)mh[Math.min(255,Math.abs(k-255-med))]+=hist[k];let mad=0;acc=0;for(let k=0;k<256;k++){acc+=mh[k];if(acc*2>=N){mad=k;break}}
  const thr=Math.min(45,Math.max(18,Math.ceil(4.5*1.4826*mad))),m0=new Uint8Array(N),md=new Uint8Array(N);for(let i=0;i<N;i++)if(Math.abs(a[i]-b[i]-med)>thr)m0[i]=1;
  for(let y=0;y<h;y++)for(let x=0;x<w;x++)if(m0[y*w+x])for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const X=x+dx,Y=y+dy;if(X>=0&&Y>=0&&X<w&&Y<h)md[Y*w+X]=1}
- const cen=it.cal?hp(it.cal.Hb,0,0).map((v,i)=>v*(i?h:w)):null,B=blobs(md,m0,w,h,12),out=[];
+ const cc=it.cal?calUnmap(it.cal,{x:0,y:0}):null,cen=cc?[cc.x*w,cc.y*h]:null,B=blobs(md,m0,w,h,12),out=[];
  for(const px of B){if(out.length>=MAXD||px.length<Math.max(12,.15*B[0].length))break;
-  if(it.cal){let cx_=0,cy_=0;px.forEach(p=>{cx_+=p%w;cy_+=p/w|0});const q=hp(it.cal.H,cx_/px.length/w,cy_/px.length/h);if(Math.hypot(q[0],q[1])>1.35)continue}
+  if(it.cal){let cx_=0,cy_=0;px.forEach(p=>{cx_+=p%w;cy_+=p/w|0});const q=calMap(it.cal,{x:cx_/px.length/w,y:cy_/px.length/h});if(Math.hypot(q[0],q[1])>1.35)continue}
   const d=blobDart(px,w,h,cen);if(d)out.push(d)}
  return out}
 $('b-ref').onclick=()=>{const it=ds[cur];if(!it)return;refs[it.key]={g:it.g.g.slice(),w:it.g.w,h:it.g.h};log(`Referenz (leeres Board) für ${it.key} gesetzt.`)};
@@ -986,11 +1012,41 @@ $('b-acc').onclick=()=>{let n=0;ds.forEach(it=>{if(!done(it).length&&it.preds&&i
 $('b-chk').onclick=()=>{const it=ds[cur];if(it){it.auto=false;it.rev=true;it.preds=[];nextRev()}};
 
 /* ---------- Datensatz laden / speichern ---------- */
+
+function imageSignature(img){
+ const c=document.createElement('canvas');c.width=24;c.height=24;
+ const x=c.getContext('2d',{willReadFrequently:true});x.drawImage(img,0,0,24,24);
+ const d=x.getImageData(0,0,24,24).data,a=new Uint8Array(24*24);
+ for(let i=0;i<a.length;i++)a[i]=Math.round(.299*d[i*4]+.587*d[i*4+1]+.114*d[i*4+2]);
+ return a;
+}
+function signatureDistance(a,b){if(!a||!b||a.length!==b.length)return 255;let z=0;for(let i=0;i<a.length;i++)z+=Math.abs(a[i]-b[i]);return z/a.length}
+function cleanDataset(){
+ let dup=0,bad=0;
+ for(let i=ds.length-1;i>=0;i--){
+  const it=ds[i];
+  for(let j=0;j<it.darts.length;j++){
+   const d=it.darts[j],valid=p=>p&&Number.isFinite(p.x)&&Number.isFinite(p.y)&&p.x>=0&&p.x<=1&&p.y>=0&&p.y<=1;
+   if(!valid(d.tip)||!valid(d.flight)||Math.hypot(d.tip.x-d.flight.x,d.tip.y-d.flight.y)<.002){it.darts.splice(j--,1);bad++}
+  }
+  if(it.darts.length>MAXD){bad+=it.darts.length-MAXD;it.darts=it.darts.slice(0,MAXD)}
+  if(it.sig){
+   const prior=ds.slice(0,i).find(q=>q.key===it.key&&q.sig&&signatureDistance(it.sig,q.sig)<2.2);
+   if(prior){ds.splice(i,1);dup++}
+  }
+ }
+ if(cur>=ds.length)cur=ds.length-1;
+ log(`Datenbereinigung: ${dup} nahezu identische Duplikate entfernt, ${bad} ungültige Dart-Annotation(en) entfernt. ${ds.length} Bilder bleiben.`);
+ updateUI();return {dup,bad};
+}
 async function addImg(url,name,split){const img=await new Promise((ok,no)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=no;i.src=url}),t=document.createElement('canvas');t.width=160;t.height=Math.round(160*img.naturalHeight/img.naturalWidth);t.getContext('2d').drawImage(img,0,0,t.width,t.height);
- const g=grayOf(img);let s=0,q=0;for(const v of g.g){s+=v;q+=v*v}const mu=s/g.g.length;ds.push({name,url,img,th:t.toDataURL('image/jpeg',.7),g,mu,sd:Math.sqrt(q/g.g.length-mu*mu),key:img.naturalWidth+'x'+img.naturalHeight,split,lc:1,darts:[],preds:[],cal:null,auto:false,rev:false})}
-function applyAnn(list){let n=0;list.forEach(a=>{const it=ds.find(d=>d.name===a.name&&!d.darts.length);if(it){it.split=a.split||it.split;it.darts=(a.darts||[]).slice(0,MAXD);it.auto=!!a.auto;it.rev=!it.auto&&(a.rev!=null?!!a.rev:(a.darts||[]).length>0);if(a.cal&&a.cal.pts&&a.cal.pts.length==19)it.cal=fitCal(a.cal.pts);n++}});return n}
-const annList=()=>ds.filter(d=>done(d).length||d.cal||d.rev).map(d=>({name:d.name,split:d.split,auto:d.auto,rev:d.rev,darts:done(d),cal:d.cal&&{pts:d.cal.pts,H:d.cal.H,rms:d.cal.rms}}));
+ const sig=imageSignature(img),key=img.naturalWidth+'x'+img.naturalHeight;
+ if(ds.some(d=>d.key===key&&d.sig&&signatureDistance(sig,d.sig)<2.2)){log(`Duplikat übersprungen: ${name}`);return false}
+ const g=grayOf(img);let s=0,q=0;for(const v of g.g){s+=v;q+=v*v}const mu=s/g.g.length;ds.push({name,url,img,sig,th:t.toDataURL('image/jpeg',.7),g,mu,sd:Math.sqrt(q/g.g.length-mu*mu),key,split,lc:1,darts:[],preds:[],cal:null,auto:false,rev:false});return true}
+function applyAnn(list){let n=0;list.forEach(a=>{const it=ds.find(d=>d.name===a.name&&!d.darts.length);if(it){it.split=a.split||it.split;it.darts=(a.darts||[]).slice(0,MAXD);it.auto=!!a.auto;it.rev=!it.auto&&(a.darts||[]).length>0;if(a.cal&&a.cal.pts&&a.cal.pts.length==19)it.cal=fitCal(a.cal.pts,it.img.naturalWidth,it.img.naturalHeight);n++}});return n}
+const annList=()=>ds.filter(d=>done(d).length||d.cal).map(d=>({name:d.name,split:d.split,auto:d.auto,darts:done(d),cal:d.cal&&{pts:d.cal.pts,H:d.cal.H,rms:d.cal.rms}}));
 const dl=(blob,name)=>{const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click()};
+$('b-clean').onclick=cleanDataset;
 $('b-zip').onclick=()=>$('i-zip').click();$('b-imgs').onclick=()=>$('i-imgs').click();$('b-json').onclick=()=>$('i-json').click();
 $('i-zip').onchange=async e=>{const f=e.target.files[0];if(!f)return;e.target.value='';
  try{const z=await JSZip.loadAsync(f);let n=0,ann=null;
@@ -999,14 +1055,14 @@ $('i-zip').onchange=async e=>{const f=e.target.files[0];if(!f)return;e.target.va
    else if(/\.(jpe?g|png|webp)$/i.test(p)){await addImg(URL.createObjectURL(await E.async('blob')),p.split('/').pop(),/(^|\/)(val|test)(\/|$)/i.test(p)?'val':'train');n++}}
   const a=ann?applyAnn(ann):0;if(cur<0&&ds.length)cur=0;log(`${n} Bilder aus ZIP geladen${ann?`, ${a} Annotationen übernommen`:''}.`);updateUI()}
  catch(err){log('ZIP-Fehler: '+err.message)}};
-$('i-imgs').onchange=async e=>{const f=[...e.target.files];e.target.value='';for(const x of f)await addImg(URL.createObjectURL(x),x.name,ds.length%5==4?'val':'train');if(cur<0&&ds.length)cur=0;log(`${f.length} Bilder geladen (Gesamt ${ds.length}).`);updateUI()};
+$('i-imgs').onchange=async e=>{const f=[...e.target.files];e.target.value='';let added=0;for(const x of f)if(await addImg(URL.createObjectURL(x),x.name,ds.length%5==4?'val':'train'))added++;if(cur<0&&ds.length)cur=0;log(`${added}/${f.length} Bilder geladen; Duplikate übersprungen (Gesamt ${ds.length}).`);updateUI()};
 $('i-json').onchange=async e=>{const f=e.target.files[0];if(!f)return;e.target.value='';try{log(`${applyAnn(JSON.parse(await f.text()))} Annotationen aus JSON übernommen.`);updateUI()}catch(err){log('JSON-Fehler: '+err.message)}};
 $('b-ejson').onclick=()=>{dl(new Blob([JSON.stringify(annList(),null,2)],{type:'application/json'}),'annotations.json')};
 $('b-ezip').onclick=async()=>{const z=new JSZip();log('ZIP wird erstellt …');
  for(const it of ds){const c=document.createElement('canvas');c.width=it.img.naturalWidth;c.height=it.img.naturalHeight;c.getContext('2d').drawImage(it.img,0,0);
   z.file(`images/${it.split==='val'?'val':'train'}/${it.name}`,await new Promise(r=>c.toBlob(r,'image/jpeg',.95)))}
  z.file('annotations.json',JSON.stringify(annList(),null,2));dl(await z.generateAsync({type:'blob'}),`dart-dataset-${Date.now()}.zip`);log('ZIP exportiert.')};
-$('b-split').onclick=()=>{lightClasses();[0,1,2].forEach(c=>ds.filter(d=>d.lc===c).sort((a,b)=>a.mu-b.mu).forEach((d,i)=>{d.split=i%5==4?'val':'train'}));log('Auto-Split: je Lichtklasse jedes 5. Bild (gleichmäßig über die Helligkeit) als TEST, der Rest TRAIN.');updateUI()};
+$('b-split').onclick=()=>{cleanDataset();lightClasses();[0,1,2].forEach(c=>ds.filter(d=>d.lc===c).sort((a,b)=>a.mu-b.mu).forEach((d,i)=>{d.split=i%5==4?'val':'train'}));log('Auto-Split: je Lichtklasse jedes 5. Bild (gleichmäßig über die Helligkeit) als TEST, der Rest TRAIN.');updateUI()};
 function lightClasses(){const n=ds.length,s=ds.map(d=>d.mu).sort((a,b)=>a-b),t1=s[Math.floor(n/3)],t2=s[Math.floor(2*n/3)];ds.forEach(d=>{d.lc=n<3?1:d.mu<t1?0:d.mu<t2?1:2})}
 
 /* ---------- Annotation UI ---------- */
@@ -1024,7 +1080,7 @@ addEventListener('keydown',e=>{if(/INPUT|SELECT|TEXTAREA|BUTTON/.test(e.target.t
  if(e.key==='ArrowLeft')$('b-prev').click();else if(e.key==='ArrowRight')$('b-next').click();
  else if(e.key==='Delete'||e.key==='Backspace'){if(calMode){calPts.pop();updateUI()}else if(ds[cur]){ds[cur].darts.pop();ds[cur].preds=[];ds[cur].auto=false;ds[cur].rev=true;updateUI()}}});
 cnv.onpointerdown=e=>{if(cur<0)return;const r=cnv.getBoundingClientRect(),x=clamp((e.clientX-r.left)/r.width),y=clamp((e.clientY-r.top)/r.height),it=ds[cur];
- if(calMode){calPts.push({x,y});if(calPts.length==19){it.cal=fitCal(calPts);calMode=false;log(`Kalibrierung fertig, Ø Fehler ${it.cal.rms.toFixed(1)} mm (Rückprojektion).`);calPts=[]}updateUI();return}
+ if(calMode){calPts.push({x,y});if(calPts.length==19){try{it.cal=fitCal(calPts,it.img.naturalWidth,it.img.naturalHeight);log(`19-Punkt-Kalibrierung fertig · RMS ${(it.cal.rms*170/91).toFixed(2)} mm · verworfene Ausreißer: ${it.cal.dropped.length}.`)}catch(err){log(err.message)}calMode=false;calPts=[]}updateUI();return}
  if(calEdit&&it.cal){let b=-1,bd=14;it.cal.pts.forEach((p,i)=>{const q=Math.hypot((p.x-x)*r.width,(p.y-y)*r.height);if(q<bd){bd=q;b=i}});if(b>=0)drag={cal:b};return}
  let f=null;it.darts.forEach((d,i)=>{for(const k of['tip','flight'])if(d[k]&&!f&&Math.hypot((d[k].x-x)*r.width,(d[k].y-y)*r.height)<11)f={i,k}});
  if(f){drag=f;return}
@@ -1033,14 +1089,14 @@ cnv.onpointerdown=e=>{if(cur<0)return;const r=cnv.getBoundingClientRect(),x=clam
  else{const t=open||it.darts[it.darts.length-1];if(t)t.flight={x,y};setTool('tip')}
  updateUI()};
 cnv.onpointermove=e=>{if(!drag)return;const r=cnv.getBoundingClientRect(),p={x:clamp((e.clientX-r.left)/r.width),y:clamp((e.clientY-r.top)/r.height)},it=ds[cur];
- if(drag.cal!=null){const c=it.cal;c.pts[drag.cal]=p;const n=fitCal(c.pts);n.conf=c.conf;it.cal=n}else{it.darts[drag.i][drag.k]=p;it.auto=false;it.rev=true}draw()};
+ if(drag.cal!=null){const c=it.cal,old={...c.pts[drag.cal]};c.pts[drag.cal]=p;try{const n=fitCal(c.pts,it.img.naturalWidth,it.img.naturalHeight);n.conf=c.conf;it.cal=n}catch(_){c.pts[drag.cal]=old}}else{it.darts[drag.i][drag.k]=p;it.auto=false;it.rev=true}draw()};
 addEventListener('pointerup',()=>{if(drag){drag=null;updateUI()}});
 
 function mk(x,y,col,t,s){cx.beginPath();cx.arc(x,y,3*s,0,7);cx.fillStyle=col;cx.fill();cx.lineWidth=1.2*s;cx.strokeStyle='#fff';cx.stroke();
  if(t){cx.font=`600 ${10*s}px sans-serif`;cx.lineWidth=2.5*s;cx.strokeStyle='#000c';cx.fillStyle='#fff';cx.strokeText(t,x+5*s,y-4*s);cx.fillText(t,x+5*s,y-4*s)}}
 function draw(){const it=ds[cur];if(!it){cnv.width=640;cnv.height=480;cx.fillStyle='#8a8d9b';cx.font='15px sans-serif';cx.textAlign='center';cx.fillText('Bilder oder ZIP laden, um zu starten',320,240);return}
  const W=it.img.naturalWidth,H=it.img.naturalHeight;if(cnv.width!==W||cnv.height!==H){cnv.width=W;cnv.height=H}cx.drawImage(it.img,0,0);const s=Math.max(1,W/640);
- if(it.cal&&$('ovl').checked){cx.strokeStyle='rgba(120,200,255,.6)';cx.lineWidth=1*s;[6.35,15.9,99,107,162,170].forEach(r=>{cx.beginPath();for(let k=0;k<=72;k++){const t=k*Math.PI/36,q=hp(it.cal.Hb,r/170*Math.cos(t),r/170*Math.sin(t));k?cx.lineTo(q[0]*W,q[1]*H):cx.moveTo(q[0]*W,q[1]*H)}cx.stroke()})}
+ if(it.cal&&$('ovl').checked){cx.strokeStyle='rgba(120,200,255,.6)';cx.lineWidth=1*s;[6.35,15.9,99,107,162,170].forEach(r=>{cx.beginPath();for(let k=0;k<=72;k++){const t=k*Math.PI/36,q=calUnmap(it.cal,{x:r/170*Math.cos(t),y:r/170*Math.sin(t)});k?cx.lineTo(q[0]*W,q[1]*H):cx.moveTo(q[0]*W,q[1]*H)}cx.stroke()})}
  calPts.forEach((p,i)=>mk(p.x*W,p.y*H,'#ffd43b',''+(i+1),s));
  if(calEdit&&it.cal)it.cal.pts.forEach((p,i)=>mk(p.x*W,p.y*H,'#ffd43b',''+(i+1),s));
  const line=(d,col,dash)=>{cx.strokeStyle=col;cx.lineWidth=1.2*s;cx.setLineDash(dash?[5*s,3*s]:[]);cx.beginPath();cx.moveTo(d.tip.x*W,d.tip.y*H);cx.lineTo(d.flight.x*W,d.flight.y*H);cx.stroke();cx.setLineDash([])};
@@ -1049,23 +1105,21 @@ function draw(){const it=ds[cur];if(!it){cnv.width=640;cnv.height=480;cx.fillSty
 
 function drawCov(){const c=$('cov'),x=c.getContext('2d'),R=68,X=75,Y=75;x.clearRect(0,0,150,150);x.strokeStyle='rgba(255,255,255,.25)';x.lineWidth=1;
  [6.35,15.9,99,107,162,170].forEach(r=>{x.beginPath();x.arc(X,Y,r/170*R,0,7);x.stroke()});for(let k=0;k<20;k++){const t=(9+18*k-90)*Math.PI/180;x.beginPath();x.moveTo(X+15.9/170*R*Math.cos(t),Y+15.9/170*R*Math.sin(t));x.lineTo(X+R*Math.cos(t),Y+R*Math.sin(t));x.stroke()}
- ds.forEach(it=>{if(!it.cal||it.auto)return;done(it).forEach(d=>{const q=hp(it.cal.H,d.tip.x,d.tip.y);x.fillStyle=it.split==='val'?'#ffd43b':'#00ff88';x.beginPath();x.arc(X+q[0]*R,Y+q[1]*R,2.5,0,7);x.fill()})})}
+ ds.forEach(it=>{if(!it.cal||it.auto)return;done(it).forEach(d=>{const q=calMap(it.cal,d.tip);x.fillStyle=it.split==='val'?'#ffd43b':'#00ff88';x.beginPath();x.arc(X+q[0]*R,Y+q[1]*R,2.5,0,7);x.fill()})})}
 
-function setModel(m){active=m;$('t1').classList.toggle('on',m==1);$('t2').classList.toggle('on',m==2);$('desc').innerHTML=DESC[m];
- $('size').innerHTML=SIZES[m].map(v=>`<option${v==(nets[m]?nets[m].size:SIZES[m][0])?' selected':''}>${v}</option>`).join('');updateUI()}
-$('t1').onclick=()=>!training&&setModel(1);$('t2').onclick=()=>!training&&setModel(2);
+function setModel(){active=1;$('desc').innerHTML=DESC[1];$('size').innerHTML=SIZES[1].map(v=>`<option${v==(nets[1]?nets[1].size:256)?' selected':''}>${v}</option>`).join('');updateUI()}
 
 function updateUI(){
- lightClasses();const it=ds[cur],ok=d=>done(d).length&&!d.auto,tr=ds.filter(d=>d.split==='train'&&ok(d)).length,va=ds.filter(d=>d.split==='val'&&ok(d)).length,nd=ds.reduce((a,d)=>a+(d.auto?0:done(d).length),0),nc=ds.filter(d=>d.cal).length;
- $('n-tr').textContent=tr;$('n-va').textContent=va;$('n-d').textContent=nd;$('n-c').textContent=nc;
+ lightClasses();const it=ds[cur],ok=d=>d.rev&&!d.auto,tr=ds.filter(d=>d.split==='train'&&ok(d)).length,va=ds.filter(d=>d.split==='val'&&ok(d)).length,nd=ds.filter(d=>d.split==='train'&&ok(d)).length,nDarts=ds.reduce((a,d)=>a+done(d).length,0),nc=ds.filter(d=>d.cal).length;
+ $('n-tr').textContent=tr;$('n-va').textContent=va;$('n-d').textContent=nDarts;$('n-c').textContent=nc;
  const lc=[0,1,2].map(c=>ds.filter(d=>d.lc===c).length),mus=ds.map(d=>d.mu);$('light').textContent=ds.length?`Licht (Ø Pixelhelligkeit ${Math.min(...mus).toFixed(0)}–${Math.max(...mus).toFixed(0)}): ${LICO[0]} ${lc[0]} · ${LICO[1]} ${lc[1]} · ${LICO[2]} ${lc[2]}`:'';
  $('cnt').textContent=it?`Bild ${cur+1}/${ds.length} · ${it.name} · ${LICO[it.lc]} Ø${it.mu.toFixed(0)} · ${it.split==='val'?'TEST':'TRAIN'}${it.rev?' · ✔ geprüft':it.auto?' · ⚙ Vorschlag':''}`:'Keine Bilder';
  if(it){$('slot').textContent=`Dart ${Math.min(MAXD,done(it).length+1)}/${MAXD}`;$('s-tr').classList.toggle('on',it.split==='train');$('s-va').classList.toggle('on',it.split==='val')}
- $('cal').textContent=calMode?`Kalibrierung: Punkt ${calPts.length+1}/19 – ${ANC[calPts.length][2]} (Entf = zurück)`:it&&it.cal?(calEdit?'Punkte ziehen zum Korrigieren · ':'')+(it.cal.conf!=null?`Auto-Kalibrierung (Konfidenz ${Math.round(it.cal.conf*100)} %)`:'Manuell kalibriert')+` · Ø Fehler ${it.cal.rms.toFixed(1)} mm`:'Nicht kalibriert – „Auto“ klicken oder 19 Punkte setzen.';
+ $('cal').textContent=calMode?`Kalibrierung: Punkt ${calPts.length+1}/19 – ${ANC[calPts.length][2]} (Entf = zurück)`:it&&it.cal?(calEdit?'Punkte ziehen zum Korrigieren · ':'')+(it.cal.conf!=null?`Auto-Kalibrierung (Konfidenz ${Math.round(it.cal.conf*100)} %)`:'Manuell kalibriert')+` · RMS ${(it.cal.rms*170/91).toFixed(2)} mm · Ausreißer ${(it.cal.dropped||[]).length}`:'Nicht kalibriert – „Auto“ klicken oder 19 Punkte setzen.';
  $('b-cal').classList.toggle('on',calMode);$('b-cedit').classList.toggle('on',calEdit);
- $('prog').textContent=`Geprüft ${ds.filter(d=>d.rev).length}/${ds.length}`;const N=!!nets[active],any=!!(nets[1]||nets[2]);
+ $('prog').textContent=`Geprüft ${ds.filter(d=>d.rev).length}/${ds.length}`;const N=!!nets[1],any=!!nets[1];
  $('b-prev').disabled=cur<=0;$('b-next').disabled=cur<0||cur>=ds.length-1;$('b-del').disabled=cur<0;$('b-ezip').disabled=$('b-ejson').disabled=!ds.length;
- $('b-train').disabled=$('b-trainall').disabled=training||!nd;$('b-stop').disabled=!training;$('b-pred').disabled=!any||cur<0||training;$('b-take').disabled=!any||cur<0;$('b-eval').disabled=!any||training||!va;$('b-exp').disabled=!N||training;$('b-snip').disabled=!N;
+ $('b-train').disabled=training||!nd;$('b-stop').disabled=!training;$('b-pred').disabled=!any||cur<0||training;$('b-take').disabled=!any||cur<0;$('b-eval').disabled=!any||training||!va;$('b-exp').disabled=!N||training;$('b-snip').disabled=!N;
  const f=$('flt').value,gal=$('gal');gal.innerHTML='';
  ds.forEach((d,i)=>{if(f=='unrev'&&d.rev||f=='train'&&d.split!='train'||f=='val'&&d.split!='val'||f=='none'&&done(d).length||f=='auto'&&!d.auto||/^[012]$/.test(f)&&d.lc!=+f)return;
   const e=document.createElement('div');e.className='th'+(i==cur?' cur':'');
@@ -1082,10 +1136,10 @@ $('b-nextrev').onclick=nextRev;
 
 /* ---------- Automatische Board-Kalibrierung (AutoBoardDetector aus camera_tablet.html, braucht OpenCV.js per Internet) ---------- */
 async function autoCal(it,prog){const r=await AutoBoardDetector.detect(it.img,{opencvUrl:'https://docs.opencv.org/4.x/opencv.js'},prog||(()=>{}));
- if(!r||!r.points||r.points.length!=19)return null;const W=it.img.naturalWidth,H=it.img.naturalHeight,c=fitCal(r.points.map(p=>({x:p.x/W,y:p.y/H})));c.conf=r.confidence;return c}
+ if(!r||!r.points||r.points.length!=19)return null;const W=it.img.naturalWidth,H=it.img.naturalHeight,c=fitCal(r.points.map(p=>({x:p.x/W,y:p.y/H})),W,H);c.conf=r.confidence;return c}
 function emptiest(key){const im=ds.filter(d=>d.key===key),R=refs[key];if(!R)return im[0];let b=im[0],bs=1e18;im.forEach(d=>{let s=0;for(let i=0;i<d.g.g.length;i+=3)s+=Math.abs(d.g.g[i]-R.g[i]);if(s<bs){bs=s;b=d}});return b}
 $('b-acal').onclick=async()=>{const it=ds[cur];if(!it||busy)return;busy=true;log('Auto-Kalibrierung läuft (OpenCV.js wird einmalig geladen) …');
- try{const c=await autoCal(it,m=>{$('cal').textContent=m});if(c){it.cal=c;calEdit=false;log(`Auto-Kalibrierung: Konfidenz ${Math.round(c.conf*100)} %. Bei Bedarf „Punkte bearbeiten“.`)}else log('Board nicht gefunden – bitte 19 Punkte manuell setzen.')}
+ try{const c=await autoCal(it,m=>{$('cal').textContent=m});if(c){it.cal=c;calEdit=false;log(`Auto-Kalibrierung (camera_tablet/OpenCV): Konfidenz ${Math.round(c.conf*100)} % · RMS ${(c.rms*170/91).toFixed(2)} mm · Ausreißer ${c.dropped.length}.`)}else log('Board nicht gefunden – bitte 19 Punkte manuell setzen.')}
  catch(e){log('Auto-Kalibrierung fehlgeschlagen: '+e.message+' (OpenCV.js benötigt Internet).')}busy=false;updateUI()};
 $('b-cedit').onclick=()=>{if(ds[cur]&&ds[cur].cal){calEdit=!calEdit;calMode=false;updateUI()}};
 
@@ -1109,12 +1163,12 @@ async function autoPipe(){
  catch(e){log('Automatik-Fehler: '+e.message)}
  busy=false;$('b-auto').disabled=false;nextRev();go('edit')}
 $('b-auto').onclick=autoPipe;
-$('b-nnall').onclick=async()=>{if(!nets[1]||busy||training)return log('Erst Apex trainieren oder laden.');busy=true;let n=0;
+$('b-nnall').onclick=async()=>{if(!nets[1]||busy||training)return log('Erst Unified Dart AI trainieren oder laden.');busy=true;let n=0;
  for(const it of ds){if(it.rev)continue;const p=await pipeline(it);if(p.length){it.darts=p.slice(0,MAXD).map(q=>({tip:{...q.tip},flight:{...q.flight}}));it.auto=true;n++}await tf.nextFrame()}
  busy=false;log(`KI-Vorschläge für ${n} ungeprüfte Bilder übernommen (⚙).`);updateUI()};
 
-tf.ready().then(()=>log(`Bereit (TF.js ${tf.version.tfjs}, Backend ${tf.getBackend()}). Ablauf: Bilder laden → kalibrieren (optional) → Darts annotieren oder per Mathe-Erkennung vorschlagen → Auto-Split → Apex trainieren → Sniper trainieren.`));
-setModel(1);go('data');
+tf.ready().then(()=>log(`Bereit (TF.js ${tf.version.tfjs}, Backend ${tf.getBackend()}). Ablauf: Bilder laden → Duplikate/Annotationen bereinigen → kalibrieren (optional) → Darts annotieren oder per Mathe-Erkennung vorschlagen → Auto-Split → Unified Dart AI trainieren.`));
+setModel();go('data');
 </script>
 </body>
 </html>
