@@ -19,7 +19,17 @@ h1{font-size:1.3rem;margin-bottom:10px}h2{font-size:1rem;border-bottom:1px solid
 .ac{color:var(--ac);border-color:rgba(0,255,136,.5);background:rgba(0,255,136,.14)}.dg{color:#ff8787;border-color:rgba(255,71,87,.5);background:rgba(255,71,87,.14)}.on{outline:2px solid var(--ac)}
 .cbox{background:#07090f;border:1px solid var(--bd);border-radius:10px;overflow:hidden;display:flex;justify-content:center}
 #cv{max-width:100%;max-height:66vh;width:auto;height:auto;cursor:crosshair;touch-action:none}
-#heat-modal{display:none;position:fixed;inset:0;z-index:9999;background:rgba(3,5,12,.97);padding:12px;overflow:auto}#heat-modal.open{display:flex;flex-direction:column;gap:10px}#heat-stage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;background:#05070d;border:1px solid #ffffff30;border-radius:12px;overflow:hidden}#heat-canvas{max-width:100%;max-height:calc(100vh - 145px);width:auto;height:auto;object-fit:contain}#heat-controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:center}#heat-controls input{width:130px}#heat-info{text-align:center;color:#b9c3d8;font-size:.8rem}
+#heat-modal{display:none;position:fixed;inset:0;z-index:9999;background:rgba(3,5,12,.98);padding:12px;overflow:auto}
+#heat-modal.open{display:flex;flex-direction:column;gap:10px}
+#heat-stage{flex:1;min-height:0;display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:stretch}
+.heat-panel{min-width:0;min-height:0;display:flex;flex-direction:column;gap:6px;background:#05070d;border:1px solid #ffffff30;border-radius:12px;padding:8px}
+.heat-panel h3{text-align:center;font-size:.9rem;color:#dbeafe}
+.heat-panel canvas{display:block;max-width:100%;max-height:calc(100vh - 205px);width:auto;height:auto;object-fit:contain;margin:auto}
+#heat-controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:center}
+#heat-controls input{width:130px}
+#heat-controls select{width:auto;min-width:145px}
+#heat-info{text-align:center;color:#b9c3d8;font-size:.8rem}
+@media(max-width:760px){#heat-stage{grid-template-columns:1fr}.heat-panel canvas{max-height:42vh}}
 select,input[type=number]{background:#171b2b;color:#fff;border:1px solid var(--bd);border-radius:6px;padding:5px 8px;width:100px}
 label{font-size:.8rem}.sm{font-size:.74rem;color:var(--gr);line-height:1.4}
 .ov{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start}.ov>div{flex:1;min-width:220px}
@@ -27,7 +37,10 @@ label{font-size:.8rem}.sm{font-size:.74rem;color:var(--gr);line-height:1.4}
 #cov{background:#07090f;border:1px solid var(--bd);border-radius:10px;width:150px;height:150px}
 .gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:7px;max-height:330px;overflow:auto;padding:2px}
 .th{position:relative;border:2px solid var(--bd);border-radius:8px;overflow:hidden;cursor:pointer;font-size:.62rem;background:#000}.th.cur{border-color:var(--ac)}
-.th img{width:100%;aspect-ratio:4/3;object-fit:cover;display:block}.th i{position:absolute;width:5px;height:5px;border-radius:50%;transform:translate(-50%,-50%);border:1px solid #fff}
+.th-media{position:relative;width:100%;overflow:hidden;background:#05070d;aspect-ratio:4/3}
+.th-media img{width:100%;height:100%;object-fit:fill;display:block}
+.th-media i{position:absolute;width:7px;height:7px;border-radius:50%;transform:translate(-50%,-50%);border:1px solid #fff;box-shadow:0 0 2px #000}
+.th-media i.tip{background:#ff4757}.th-media i.flight{background:#4dabf7}
 .th div{display:flex;justify-content:space-between;padding:2px 4px;background:#000a}
 #log{background:#07090f;border:1px solid var(--bd);border-radius:8px;padding:8px;height:140px;overflow-y:auto;font:.7rem ui-monospace,monospace;color:#cfd6e6}
 #chart{width:100%;height:90px;background:#07090f;border:1px solid var(--bd);border-radius:8px}
@@ -122,7 +135,12 @@ details summary{cursor:pointer;font-size:.8rem;color:var(--gr);margin:4px 0}deta
 </div></section>
 
 </main></div>
-<div id="heat-modal" aria-label="Heatmap Vollbild"><div class="row"><b>🌈 Unified Dart AI – Heatmaps</b><button class="btn dg" id="b-heat-close">✕ Schließen (Esc)</button></div><div id="heat-stage"><canvas id="heat-canvas"></canvas></div><div id="heat-controls"><button class="btn ac" data-hmode="both">Beide</button><button class="btn" data-hmode="tip">🎯 Spitzen</button><button class="btn" data-hmode="flight">🪶 Flights</button><label>Deckkraft <input id="heat-alpha" type="range" min="10" max="95" value="65"></label><label><input id="heat-numbers" type="checkbox" checked> Zahlen anzeigen</label></div><div id="heat-info">Rot = hohe Modellaktivierung · Blau = niedrige Aktivierung. Zahlen zeigen Rang und Aktivierungswert.</div></div>
+<div id="heat-modal" aria-label="Heatmap Vollbild"><div class="row"><b>🌈 Unified Dart AI – Heatmaps</b><button class="btn dg" id="b-heat-close">✕ Schließen (Esc)</button></div><div id="heat-stage">
+<div class="heat-panel" id="heat-tip-panel"><h3>🎯 Spitzen-Heatmap</h3><canvas id="heat-tip-canvas"></canvas></div>
+<div class="heat-panel" id="heat-flight-panel"><h3>🪶 Flight-Heatmap</h3><canvas id="heat-flight-canvas"></canvas></div>
+</div>
+<div id="heat-controls"><button class="btn ac" data-hmode="both">Beide groß</button><button class="btn" data-hmode="tip">Nur Spitzen</button><button class="btn" data-hmode="flight">Nur Flights</button><label>Farbmodus <select id="heat-palette"><option value="spectrum">Spektrum (Blau–Rot)</option><option value="gray">Schwarz–Weiß</option><option value="rg">Rot–Grün</option></select></label><label>Deckkraft <input id="heat-alpha" type="range" min="10" max="95" value="65"></label><label><input id="heat-numbers" type="checkbox" checked> Zahlen anzeigen</label></div>
+<div id="heat-info">Jede Heatmap wird separat und groß dargestellt. Zahlen zeigen Rang und Aktivierungswert in Prozent.</div></div>
 <script>
 const BOARD = { size: 200, cx: 100, cy: 100, rOuter: 91 };
 const BOARD_MM = { bullseye: 6.35, singleBull: 15.9, tripleInner: 99, tripleOuter: 107, doubleInner: 162, doubleOuter: 170 };
@@ -924,24 +942,62 @@ async function trainModel(m,size){
 $('b-train').onclick=()=>trainModel(1,+$('size').value);
 $('b-stop').onclick=()=>{stopF=true};
 
-/* ---------- Interaktive Heatmap-Ansicht ---------- */
+/* ---------- Interaktive Heatmap-Ansicht: zwei getrennte große Karten ---------- */
 let lastHeat=null,heatMode='both';
-const hm=$('heat-modal'),hcv=$('heat-canvas'),hcx=hcv.getContext('2d');
-function heatColor(v){const hue=(1-Math.max(0,Math.min(1,v)))*240;return `hsl(${hue},100%,52%)`}
-function paintHeat(){if(!lastHeat)return;const {it,d,hs}=lastHeat,W=it.img.naturalWidth,H=it.img.naturalHeight,alpha=+$('heat-alpha').value/100;
- hcv.width=W;hcv.height=H;hcx.clearRect(0,0,W,H);hcx.drawImage(it.img,0,0,W,H);
- const channels=heatMode==='both'?[0,1]:[heatMode==='tip'?0:1];
- channels.forEach(ch=>{const off=document.createElement('canvas');off.width=hs;off.height=hs;const ox=off.getContext('2d'),im=ox.createImageData(hs,hs);
- for(let y=0;y<hs;y++)for(let x=0;x<hs;x++){const v=Math.max(0,Math.min(1,d[(y*hs+x)*2+ch]));const k=(y*hs+x)*4;if(v<.08)continue;const hue=(1-v)*240,c=1,hh=hue/60,X=c*(1-Math.abs(hh%2-1));let r=0,g=0,b=0;if(hh<1)[r,g,b]=[c,X,0];else if(hh<2)[r,g,b]=[X,c,0];else if(hh<3)[r,g,b]=[0,c,X];else if(hh<4)[r,g,b]=[0,X,c];else if(hh<5)[r,g,b]=[X,0,c];else [r,g,b]=[c,0,X];im.data[k]=r*255;im.data[k+1]=g*255;im.data[k+2]=b*255;im.data[k+3]=Math.round(alpha*Math.pow(v,1.35)*220)}
- ox.putImageData(im,0,0);hcx.imageSmoothingEnabled=true;hcx.drawImage(off,0,0,W,H);
- const ps=peaks(d,hs,ch,.12,MAXD);if($('heat-numbers').checked)ps.forEach((q,i)=>{const x=q.x*W,y=q.y*H,label=(ch===0?'S':'F')+(i+1)+' '+Math.round(q.v*100)+'%';hcx.font=`bold ${Math.max(13,W/55)}px system-ui`;hcx.lineWidth=Math.max(3,W/400);hcx.strokeStyle='#000';hcx.fillStyle=ch===0?'#ffec99':'#d7f2ff';hcx.beginPath();hcx.arc(x,y,Math.max(10,W/100),0,Math.PI*2);hcx.fillStyle=ch===0?'#e03131':'#1971c2';hcx.globalAlpha=.9;hcx.fill();hcx.globalAlpha=1;hcx.stroke();hcx.strokeText(label,x+12,y-12);hcx.fillText(label,x+12,y-12)})
+const hm=$('heat-modal'),heatCanvases=[$('heat-tip-canvas'),$('heat-flight-canvas')],heatContexts=heatCanvases.map(c=>c.getContext('2d'));
+function heatRGB(v,palette){
+ v=clamp(v);
+ if(palette==='gray')return [Math.round(v*255),Math.round(v*255),Math.round(v*255)];
+ if(palette==='rg')return [Math.round(255*(1-v)),Math.round(255*v),Math.round(35+35*(1-Math.abs(.5-v)*2))];
+ // Perceptually clear blue -> cyan -> yellow -> red spectrum.
+ const stops=[[0,35,90,220],[.33,0,205,220],[.66,255,220,0],[1,220,25,35]];
+ let j=0;while(j<stops.length-2&&v>stops[j+1][0])j++;
+ const a=stops[j],b=stops[j+1],t=(v-a[0])/(b[0]-a[0]);
+ return [1,2,3].map(k=>Math.round(a[k]*(1-t)+b[k]*t));
+}
+function paintHeat(){
+ if(!lastHeat)return;
+ const {it,d,hs}=lastHeat,W=it.img.naturalWidth,H=it.img.naturalHeight,alpha=+$('heat-alpha').value/100,palette=$('heat-palette').value;
+ [0,1].forEach(ch=>{
+  const panel=$(ch===0?'heat-tip-panel':'heat-flight-panel'),canvas=heatCanvases[ch],ctx=heatContexts[ch];
+  panel.style.display=heatMode==='both'||heatMode===(ch===0?'tip':'flight')?'flex':'none';
+  if(panel.style.display==='none')return;
+  canvas.width=W;canvas.height=H;ctx.clearRect(0,0,W,H);ctx.drawImage(it.img,0,0,W,H);
+  const off=document.createElement('canvas');off.width=hs;off.height=hs;
+  const ox=off.getContext('2d'),im=ox.createImageData(hs,hs);
+  for(let y=0;y<hs;y++)for(let x=0;x<hs;x++){
+   const v=clamp(d[(y*hs+x)*2+ch]),k=(y*hs+x)*4;
+   if(v<.035)continue;
+   const [r,g,b]=heatRGB(v,palette);
+   im.data[k]=r;im.data[k+1]=g;im.data[k+2]=b;im.data[k+3]=Math.round(alpha*Math.pow(v,1.15)*230);
+  }
+  ox.putImageData(im,0,0);ctx.imageSmoothingEnabled=true;ctx.drawImage(off,0,0,W,H);
+  const ps=peaks(d,hs,ch,.12,MAXD);
+  if($('heat-numbers').checked)ps.forEach((q,i)=>{
+   const x=q.x*W,y=q.y*H,label=(ch===0?'S':'F')+(i+1)+'  '+Math.round(q.v*100)+'%';
+   const radius=Math.max(12,W/95),font=Math.max(14,W/58);
+   ctx.beginPath();ctx.arc(x,y,radius,0,Math.PI*2);
+   ctx.fillStyle=ch===0?'#e03131':'#1971c2';ctx.globalAlpha=.94;ctx.fill();ctx.globalAlpha=1;
+   ctx.lineWidth=Math.max(2,W/450);ctx.strokeStyle='#fff';ctx.stroke();
+   ctx.font=`800 ${font}px system-ui`;ctx.lineJoin='round';ctx.lineWidth=Math.max(3,W/350);
+   ctx.strokeStyle='#080b12';ctx.strokeText(label,x+radius+5,y-font*.35);
+   ctx.fillStyle='#fff';ctx.fillText(label,x+radius+5,y-font*.35);
+  });
  });
 }
-function openHeat(){const it=ds[cur];if(!it)return log('Bitte zuerst ein Bild auswählen.');if(!nets[1])return log('Bitte zuerst das Unified-Dart-AI-Modell trainieren oder laden.');
- $('b-heat').disabled=true;log('Berechne Heatmaps …');runNet(1,it,I).then(o=>{lastHeat={it,d:o.d,hs:o.hs};hm.classList.add('open');document.body.style.overflow='hidden';paintHeat();log('Heatmaps berechnet. Rot zeigt starke Aktivierung; Zahlen zeigen Rang und Aktivierungswert.')}).catch(e=>log('Heatmap-Fehler: '+e.message)).finally(()=>$('b-heat').disabled=false)}
+function openHeat(){
+ const it=ds[cur];if(!it)return log('Bitte zuerst ein Bild auswählen.');
+ if(!nets[1])return log('Bitte zuerst das Unified-Dart-AI-Modell trainieren oder laden.');
+ $('b-heat').disabled=true;log('Berechne beide Heatmaps …');
+ runNet(1,it,I).then(o=>{lastHeat={it,d:o.d,hs:o.hs};hm.classList.add('open');document.body.style.overflow='hidden';paintHeat();log('Zwei getrennte Heatmaps berechnet. Zahlen zeigen die stärksten Aktivierungspunkte.')})
+ .catch(e=>log('Heatmap-Fehler: '+e.message)).finally(()=>$('b-heat').disabled=false)
+}
 function closeHeat(){hm.classList.remove('open');document.body.style.overflow=''}
-$('b-heat').onclick=openHeat;$('b-heat-close').onclick=closeHeat;$('heat-alpha').oninput=paintHeat;$('heat-numbers').onchange=paintHeat;
-document.querySelectorAll('[data-hmode]').forEach(b=>b.onclick=()=>{heatMode=b.dataset.hmode;document.querySelectorAll('[data-hmode]').forEach(q=>q.classList.toggle('ac',q===b));paintHeat()});
+$('b-heat').onclick=openHeat;$('b-heat-close').onclick=closeHeat;
+$('heat-alpha').oninput=paintHeat;$('heat-numbers').onchange=paintHeat;$('heat-palette').onchange=paintHeat;
+document.querySelectorAll('[data-hmode]').forEach(b=>b.onclick=()=>{
+ heatMode=b.dataset.hmode;document.querySelectorAll('[data-hmode]').forEach(q=>q.classList.toggle('ac',q===b));paintHeat()
+});
 addEventListener('keydown',e=>{if(e.key==='Escape'&&hm.classList.contains('open'))closeHeat()});
 
 /* ---------- Inferenz ---------- */
@@ -1043,25 +1099,96 @@ async function addImg(url,name,split){const img=await new Promise((ok,no)=>{cons
  const sig=imageSignature(img),key=img.naturalWidth+'x'+img.naturalHeight;
  if(ds.some(d=>d.key===key&&d.sig&&signatureDistance(sig,d.sig)<2.2)){log(`Duplikat übersprungen: ${name}`);return false}
  const g=grayOf(img);let s=0,q=0;for(const v of g.g){s+=v;q+=v*v}const mu=s/g.g.length;ds.push({name,url,img,sig,th:t.toDataURL('image/jpeg',.7),g,mu,sd:Math.sqrt(q/g.g.length-mu*mu),key,split,lc:1,darts:[],preds:[],cal:null,auto:false,rev:false});return true}
-function applyAnn(list){let n=0;list.forEach(a=>{const it=ds.find(d=>d.name===a.name&&!d.darts.length);if(it){it.split=a.split||it.split;it.darts=(a.darts||[]).slice(0,MAXD);it.auto=!!a.auto;it.rev=!it.auto&&(a.darts||[]).length>0;if(a.cal&&a.cal.pts&&a.cal.pts.length==19)it.cal=fitCal(a.cal.pts,it.img.naturalWidth,it.img.naturalHeight);n++}});return n}
-const annList=()=>ds.filter(d=>done(d).length||d.cal).map(d=>({name:d.name,split:d.split,auto:d.auto,darts:done(d),cal:d.cal&&{pts:d.cal.pts,H:d.cal.H,rms:d.cal.rms}}));
-const dl=(blob,name)=>{const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click()};
+function annList(){
+ return ds.filter(d=>d.rev||d.auto||done(d).length||d.cal).map(d=>({
+  path:d.archivePath||`images/${d.split==='val'?'val':'train'}/${d.name}`,
+  name:d.name,split:d.split,auto:!!d.auto,rev:!!d.rev,
+  darts:(d.darts||[]).map(q=>({tip:q.tip&&{x:q.tip.x,y:q.tip.y},flight:q.flight&&{x:q.flight.x,y:q.flight.y}})),
+  cal:d.cal&&{pts:d.cal.pts,H:d.cal.H,rms:d.cal.rms}
+ }));
+}
+function applyAnn(list){
+ if(!Array.isArray(list))throw new Error('annotations.json muss eine Liste von Annotationen enthalten.');
+ let n=0,miss=0;
+ for(const a of list){
+  if(!a||typeof a!=='object')continue;
+  const ap=(a.path||'').replace(/\\/g,'/').replace(/^\.\//,'');
+  let it=ap?ds.find(d=>d.archivePath===ap):null;
+  if(!it)it=ds.find(d=>d.name===a.name&&!d._annApplied);
+  if(!it){miss++;continue}
+  const incoming=Array.isArray(a.darts)?a.darts:[];
+  const valid=incoming.slice(0,MAXD).filter(q=>q&&q.tip&&q.flight&&
+   [q.tip.x,q.tip.y,q.flight.x,q.flight.y].every(v=>Number.isFinite(v)&&v>=0&&v<=1));
+  it.darts=valid.map(q=>({tip:{x:q.tip.x,y:q.tip.y},flight:{x:q.flight.x,y:q.flight.y}}));
+  it.split=a.split==='val'?'val':a.split==='train'?'train':it.split;
+  it.auto=!!a.auto;it.rev=!!a.rev||(!it.auto&&valid.length>0);
+  if(a.cal&&Array.isArray(a.cal.pts)&&a.cal.pts.length===19){
+   try{it.cal=fitCal(a.cal.pts,it.img.naturalWidth,it.img.naturalHeight)}catch(err){log(`Kalibrierung für ${it.name} übersprungen: ${err.message}`)}
+  }
+  it._annApplied=true;n++;
+ }
+ ds.forEach(d=>delete d._annApplied);
+ return {count:n,missing:miss};
+}
+const dl=(blob,name)=>{const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),30000)};
 $('b-clean').onclick=cleanDataset;
 $('b-zip').onclick=()=>$('i-zip').click();$('b-imgs').onclick=()=>$('i-imgs').click();$('b-json').onclick=()=>$('i-json').click();
-$('i-zip').onchange=async e=>{const f=e.target.files[0];if(!f)return;e.target.value='';
- try{const z=await JSZip.loadAsync(f);let n=0,ann=null;
-  for(const p of Object.keys(z.files).sort()){const E=z.files[p];if(E.dir)continue;
-   if(/annotations\.json$/i.test(p))ann=JSON.parse(await E.async('string'));
-   else if(/\.(jpe?g|png|webp)$/i.test(p)){await addImg(URL.createObjectURL(await E.async('blob')),p.split('/').pop(),/(^|\/)(val|test)(\/|$)/i.test(p)?'val':'train');n++}}
-  const a=ann?applyAnn(ann):0;if(cur<0&&ds.length)cur=0;log(`${n} Bilder aus ZIP geladen${ann?`, ${a} Annotationen übernommen`:''}.`);updateUI()}
- catch(err){log('ZIP-Fehler: '+err.message)}};
+$('i-zip').onchange=async e=>{
+ const f=e.target.files[0];if(!f)return;e.target.value='';
+ try{
+  const z=await JSZip.loadAsync(f);let n=0,ann=null;
+  const entries=Object.keys(z.files).filter(p=>!z.files[p].dir).sort();
+  for(const p of entries){
+   const E=z.files[p];
+   if(/(^|\/)annotations\.json$/i.test(p)){ann=JSON.parse(await E.async('string'));continue}
+   if(!/\.(jpe?g|png|webp|bmp)$/i.test(p))continue;
+   const blob=await E.async('blob'),added=await addImg(URL.createObjectURL(blob),p.split('/').pop(),/(^|\/)(val|test)(\/|$)/i.test(p)?'val':'train');
+   if(added){
+    const it=ds[ds.length-1];it.archivePath=p.replace(/\\/g,'/');it.sourceType=blob.type||'image/jpeg';n++;
+   }
+  }
+  let a={count:0,missing:0};
+  if(ann){
+   // Older exports only stored basename; new exports use exact archive paths.
+   if(Array.isArray(ann))a=applyAnn(ann);
+   else if(Array.isArray(ann.annotations))a=applyAnn(ann.annotations);
+   else if(Array.isArray(ann.images))a=applyAnn(ann.images);
+   else throw new Error('Unbekanntes annotations.json-Format.');
+  }
+  if(cur<0&&ds.length)cur=0;
+  log(`${n} neue Bilder geladen · ${a.count} Annotationseinträge übernommen${a.missing?` · ${a.missing} ohne passendes Bild`:''}.`);
+  updateUI();
+ }catch(err){log('ZIP-Fehler: '+err.message)}
+};
 $('i-imgs').onchange=async e=>{const f=[...e.target.files];e.target.value='';let added=0;for(const x of f)if(await addImg(URL.createObjectURL(x),x.name,ds.length%5==4?'val':'train'))added++;if(cur<0&&ds.length)cur=0;log(`${added}/${f.length} Bilder geladen; Duplikate übersprungen (Gesamt ${ds.length}).`);updateUI()};
-$('i-json').onchange=async e=>{const f=e.target.files[0];if(!f)return;e.target.value='';try{log(`${applyAnn(JSON.parse(await f.text()))} Annotationen aus JSON übernommen.`);updateUI()}catch(err){log('JSON-Fehler: '+err.message)}};
+$('i-json').onchange=async e=>{const f=e.target.files[0];if(!f)return;e.target.value='';try{const a=applyAnn(JSON.parse(await f.text()));log(`${a.count} Annotationseinträge übernommen${a.missing?`, ${a.missing} ohne passendes Bild`:''}.`);updateUI()}catch(err){log('JSON-Fehler: '+err.message)}};
 $('b-ejson').onclick=()=>{dl(new Blob([JSON.stringify(annList(),null,2)],{type:'application/json'}),'annotations.json')};
-$('b-ezip').onclick=async()=>{const z=new JSZip();log('ZIP wird erstellt …');
- for(const it of ds){const c=document.createElement('canvas');c.width=it.img.naturalWidth;c.height=it.img.naturalHeight;c.getContext('2d').drawImage(it.img,0,0);
-  z.file(`images/${it.split==='val'?'val':'train'}/${it.name}`,await new Promise(r=>c.toBlob(r,'image/jpeg',.95)))}
- z.file('annotations.json',JSON.stringify(annList(),null,2));dl(await z.generateAsync({type:'blob'}),`dart-dataset-${Date.now()}.zip`);log('ZIP exportiert.')};
+$('b-ezip').onclick=async()=>{
+ const z=new JSZip();log('ZIP wird mit Bildpfaden und Annotationen erstellt …');
+ try{
+  const manifest=[];
+  for(const it of ds){
+   const ext=(it.name.match(/\.(jpe?g|png|webp|bmp)$/i)||[])[0]||'.jpg';
+   const path=`images/${it.split==='val'?'val':'train'}/${String(manifest.length+1).padStart(5,'0')}_${it.name.replace(/[\\\\/:*?"<>|]/g,'_')}`;
+   const blob=await new Promise((resolve,reject)=>{
+    if(it.img.src.startsWith('blob:')||it.img.src.startsWith('data:')){
+     fetch(it.img.src).then(r=>r.blob()).then(resolve,reject);
+    }else{
+     const c=document.createElement('canvas');c.width=it.img.naturalWidth;c.height=it.img.naturalHeight;
+     c.getContext('2d').drawImage(it.img,0,0);c.toBlob(b=>b?resolve(b):reject(new Error('Bild konnte nicht encodiert werden: '+it.name)),ext.toLowerCase()==='.png'?'image/png':'image/jpeg',.96);
+    }
+   });
+   z.file(path,blob);
+   manifest.push({path,name:it.name,split:it.split,auto:!!it.auto,rev:!!it.rev,
+    darts:(it.darts||[]).map(q=>({tip:q.tip&&{x:q.tip.x,y:q.tip.y},flight:q.flight&&{x:q.flight.x,y:q.flight.y}})),
+    cal:it.cal&&{pts:it.cal.pts,H:it.cal.H,rms:it.cal.rms}});
+  }
+  z.file('annotations.json',JSON.stringify({format:'dart-ai-annotations',version:2,annotations:manifest},null,2));
+  z.file('README.txt','Dart AI Trainer Dataset\\nBilder liegen unter images/train bzw. images/val.\\nannotations.json enthält Pfad, Split, geprüfte Annotationen und Kalibrierung.\\nKoordinaten x/y sind normalisiert (0 bis 1), Ursprung links oben.\\n');
+  dl(await z.generateAsync({type:'blob'}),`dart-dataset-${Date.now()}.zip`);
+  log(`ZIP exportiert: ${manifest.length} Bilder mit passgenauen Annotationen.`);
+ }catch(err){log('ZIP-Exportfehler: '+err.message)}
+};
 $('b-split').onclick=()=>{cleanDataset();lightClasses();[0,1,2].forEach(c=>ds.filter(d=>d.lc===c).sort((a,b)=>a.mu-b.mu).forEach((d,i)=>{d.split=i%5==4?'val':'train'}));log('Auto-Split: je Lichtklasse jedes 5. Bild (gleichmäßig über die Helligkeit) als TEST, der Rest TRAIN.');updateUI()};
 function lightClasses(){const n=ds.length,s=ds.map(d=>d.mu).sort((a,b)=>a-b),t1=s[Math.floor(n/3)],t2=s[Math.floor(2*n/3)];ds.forEach(d=>{d.lc=n<3?1:d.mu<t1?0:d.mu<t2?1:2})}
 
@@ -1123,8 +1250,9 @@ function updateUI(){
  const f=$('flt').value,gal=$('gal');gal.innerHTML='';
  ds.forEach((d,i)=>{if(f=='unrev'&&d.rev||f=='train'&&d.split!='train'||f=='val'&&d.split!='val'||f=='none'&&done(d).length||f=='auto'&&!d.auto||/^[012]$/.test(f)&&d.lc!=+f)return;
   const e=document.createElement('div');e.className='th'+(i==cur?' cur':'');
-  e.innerHTML=`<img src="${d.th}">`+done(d).map(q=>`<i style="left:${q.tip.x*100}%;top:${q.tip.y*100}%;background:#ff4757"></i><i style="left:${q.flight.x*100}%;top:${q.flight.y*100}%;background:#4dabf7"></i>`).join('')+
-  `<div><span style="color:${d.split=='val'?'#ffd43b':'#00ff88'}">${d.split=='val'?'TEST':'TRAIN'} ${LICO[d.lc]}</span><span>${d.rev?'✔':d.auto?'⚙':''}${d.cal?'📐':''}${done(d).length}🎯</span></div>`;
+  e.innerHTML=`<div class="th-media" style="aspect-ratio:${d.img.naturalWidth}/${d.img.naturalHeight}"><img src="${d.th}">`+
+  done(d).map(q=>`<i class="tip" style="left:${q.tip.x*100}%;top:${q.tip.y*100}%"></i><i class="flight" style="left:${q.flight.x*100}%;top:${q.flight.y*100}%"></i>`).join('')+
+  `</div><div><span style="color:${d.split=='val'?'#ffd43b':'#00ff88'}">${d.split=='val'?'TEST':'TRAIN'} ${LICO[d.lc]}</span><span>${d.rev?'✔':d.auto?'⚙':''}${d.cal?'📐':''}${done(d).length}🎯</span></div>`;
   e.onclick=()=>{cur=i;calMode=false;calEdit=false;calPts=[];go('edit')};gal.append(e)});
  drawCov();draw()}
 
