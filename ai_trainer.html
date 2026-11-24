@@ -71,7 +71,7 @@ details summary{cursor:pointer;font-size:.8rem;color:var(--gr);margin:4px 0}deta
 <div class="card"><div class="row"><span id="cnt" class="sm"></span><span id="prog" class="sm"></span></div>
 <div class="cbox"><canvas id="cv" width="640" height="480"></canvas></div>
 <div class="row"><button class="btn" id="b-prev">◀</button><button class="btn ac" id="b-chk">✔ Geprüft &amp; weiter (Enter)</button><button class="btn" id="b-nextrev">⏭ Nächstes ungeprüftes</button><button class="btn" id="b-next">▶</button></div>
-<p class="sm">Klick = Punkt setzen (Spitze → Flight), ziehen = verschieben, Entf = letzten Dart löschen, ←/→ = Bild wechseln, Enter = geprüft.</p></div>
+<p class="sm">Klick = Punkt setzen (Spitze → Flight), ziehen = verschieben, Entf = letzten Dart löschen, ←/→ = Bild wechseln, Enter = geprüft. Ohne Dart bestätigen = leeres Board (Negativbeispiel gegen Fehlalarme).</p></div>
 <div class="card">
 <h2>Annotation</h2>
 <div class="row"><div class="row"><button class="btn on" id="m-tip" style="color:#ff8787">🎯 Spitze</button><button class="btn" id="m-fl" style="color:#74c0fc">🪶 Flight</button></div><span id="slot" class="sm"></span></div>
@@ -92,7 +92,7 @@ details summary{cursor:pointer;font-size:.8rem;color:var(--gr);margin:4px 0}deta
 <div class="row" style="justify-content:stretch"><button class="btn on" id="t1" style="flex:1">⚡ Apex</button><button class="btn" id="t2" style="flex:1">🎯 Sniper</button></div>
 <p class="sm" id="desc"></p>
 <div class="row"><label>Eingabegröße</label><select id="size"></select></div>
-<div class="row"><label>Epochen</label><input type="number" id="ep" value="40" min="1" max="500"></div>
+<div class="row"><label>Epochen</label><input type="number" id="ep" value="60" min="1" max="500"></div>
 <div class="row"><label>Batchgröße</label><input type="number" id="bs" value="8" min="1" max="64"></div>
 <div class="row"><label>Lernrate</label><input type="number" id="lr" value="0.002" step="0.0005" min="0.0001" max="0.05"></div>
 <div class="row"><label>Erkennungsschwelle</label><input type="number" id="thr" value="0.3" step="0.05" min="0.05" max="0.95"></div>
@@ -109,7 +109,7 @@ details summary{cursor:pointer;font-size:.8rem;color:var(--gr);margin:4px 0}deta
 
 <section class="scr" id="s-model"><div class="card">
 <h2>📊 Bewerten</h2>
-<div class="row" style="justify-content:flex-start"><button class="btn ac" id="b-eval">📊 Test-Set bewerten</button></div>
+<div class="row" style="justify-content:flex-start"><button class="btn ac" id="b-eval">📊 Test-Set bewerten</button><button class="btn" id="b-tune">🎚️ Schwelle automatisch</button></div>
 <h2>⬇️ Speichern &amp; einsetzen</h2>
 <div class="row" style="justify-content:flex-start"><button class="btn ac" id="b-exp">⬇️ Modell herunterladen</button><button class="btn" id="b-lm">📂 Modell laden</button><button class="btn" id="b-snip">📋 Einbau-Code</button></div>
 <input type="file" id="i-mod" accept=".json,.bin" multiple hidden><textarea id="snip" hidden readonly></textarea>
@@ -812,7 +812,7 @@ const cnv=$('cv'),cx=cnv.getContext('2d'),tc=document.createElement('canvas');
 const log=m=>{$('bar').textContent=m;const d=document.createElement('div');d.textContent=`[${new Date().toLocaleTimeString('de-DE')}] ${m}`;$('log').append(d);$('log').scrollTop=1e9};
 const done=it=>it?it.darts.filter(d=>d.tip&&d.flight):[],clamp=v=>Math.max(0,Math.min(1,v));
 const DESC={1:'<b>Apex:</b> sieht das ganze Bild und erzeugt Heatmaps für Spitzen und Flights (bis 3 Darts). Bekommt zusätzlich Board-Koordinaten aus der 19-Punkt-Kalibrierung (Blickwinkel &amp; Lage), falls vorhanden.',2:'<b>Sniper:</b> bekommt einen Crop um einen Dart aus dem Originalbild (volle Auflösung) und verfeinert Spitze und Flight.'};
-const SIZES={1:[128,192,256],2:[64,96,128]},LNAME=['dunkel','mittel','hell'],LICO=['🌑','🌗','☀️'];
+const SIZES={1:[192,128,256],2:[64,96,128]},LNAME=['dunkel','mittel','hell'],LICO=['🌑','🌗','☀️'];
 
 /* ---------- 19 Kalibrierpunkte (wie camera_tablet.html), Board-Einheiten: Doppel-Außenrand = 1 ---------- */
 const ANC=(()=>{const a=[[0,0,'Bullseye (Mitte)']],sc=d=>SECT[(((d/18)|0)+20)%20],P=(d,r,t)=>{const q=(d-90)*Math.PI/180;a.push([r*Math.cos(q),r*Math.sin(q),t])};
@@ -820,7 +820,8 @@ const ANC=(()=>{const a=[[0,0,'Bullseye (Mitte)']],sc=d=>SECT[(((d/18)|0)+20)%20
 
 /* ---------- Heatmap-Dekodierung & Hilfen (auch im Einbau-Code) ---------- */
 function peaks(h,s,ch,thr,n){const r=[];for(let y=0;y<s;y++)for(let x=0;x<s;x++){const v=h[(y*s+x)*2+ch];if(v<thr)continue;let ok=1,sw=0,sx=0,sy=0;for(let j=-1;j<=1;j++)for(let i=-1;i<=1;i++){const X=x+i,Y=y+j;if(X<0||Y<0||X>=s||Y>=s)continue;const w=h[(Y*s+X)*2+ch];if(w>v)ok=0;sw+=w;sx+=w*(X+.5);sy+=w*(Y+.5)}if(ok)r.push({x:sx/sw/s,y:sy/sw/s,v})}r.sort((a,b)=>b.v-a.v);const o=[];for(const p of r)if(o.length<n&&o.every(q=>Math.hypot(q.x-p.x,q.y-p.y)>3/s))o.push(p);return o}
-function pair(T,F){const c=[];T.forEach((t,i)=>F.forEach((f,j)=>c.push([Math.hypot(t.x-f.x,t.y-f.y),i,j])));c.sort((a,b)=>a[0]-b[0]);const ui=new Set,uj=new Set,o=[];for(const[,i,j]of c){if(ui.has(i)||uj.has(j))continue;ui.add(i);uj.add(j);o.push({tip:{x:T[i].x,y:T[i].y},flight:{x:F[j].x,y:F[j].y}})}return o}
+function pair(T,F){const c=[];T.forEach((t,i)=>F.forEach((f,j)=>{const d=Math.hypot(t.x-f.x,t.y-f.y);if(d>.01&&d<.6)c.push([d/Math.sqrt(t.v*f.v),i,j])}));c.sort((a,b)=>a[0]-b[0]);const ui=new Set,uj=new Set,o=[];for(const[,i,j]of c){if(ui.has(i)||uj.has(j))continue;ui.add(i);uj.add(j);o.push({tip:{x:T[i].x,y:T[i].y},flight:{x:F[j].x,y:F[j].y},v:Math.sqrt(T[i].v*F[j].v)})}return o}
+const decodeApex=(o,th)=>pair(peaks(o.d,o.hs,0,th,MAXD),peaks(o.d,o.hs,1,th,MAXD));
 const hp=(h,x,y)=>{const k=h[6]*x+h[7]*y+1;return[(h[0]*x+h[1]*y+h[2])/k,(h[3]*x+h[4]*y+h[5])/k]};
 /* Zusatzkanäle: Board-Koordinaten (x,y) je Pixel + Kalibrier-Flag; Hc = Homographie Bild(0..1) → Board */
 function exCh(Hc,size,toSrc){const o=new Float32Array(size*size*3);if(!Hc)return o;let k=0;for(let j=0;j<size;j++)for(let i=0;i<size;i++){const p=toSrc((i+.5)/size,(j+.5)/size),q=hp(Hc,p.x,p.y);o[k]=q[0]*.6;o[k+1]=q[1]*.6;o[k+2]=1;k+=3}return o}
@@ -844,20 +845,21 @@ function withAug(T){const r=Math.random,S=$('augs').value==='2',a=S?(r()*2-1)*Ma
 function render(it,T,size){tc.width=tc.height=size;const x=tc.getContext('2d'),W=it.img.naturalWidth,H=it.img.naturalHeight,{A,b}=T;
  x.fillStyle='#000';x.fillRect(0,0,size,size);x.setTransform(size*A[0][0]/W,size*A[1][0]/W,size*A[0][1]/H,size*A[1][1]/H,size*b[0],size*b[1]);x.drawImage(it.img,0,0);return tc}
 function heat(tips,fls,hs){const h=new Float32Array(hs*hs*2),sg=1.5;[tips,fls].forEach((P,ch)=>P.forEach(([u,v])=>{const px=u*hs-.5,py=v*hs-.5;
- for(let y=Math.max(0,Math.floor(py-4));y<=Math.min(hs-1,Math.ceil(py+4));y++)for(let x=Math.max(0,Math.floor(px-4));x<=Math.min(hs-1,Math.ceil(px+4));x++){const g=Math.exp(-((x-px)**2+(y-py)**2)/(2*sg*sg)),i=(y*hs+x)*2+ch;if(g>h[i])h[i]=g}}));return h}
+ for(let y=Math.max(0,Math.floor(py-4));y<=Math.min(hs-1,Math.ceil(py+4));y++)for(let x=Math.max(0,Math.floor(px-4));x<=Math.min(hs-1,Math.ceil(px+4));x++){const g=Math.exp(-((x-px)**2+(y-py)**2)/(2*sg*sg)),i=(y*hs+x)*2+ch;if(g>h[i])h[i]=g}const X=Math.round(px),Y=Math.round(py);if(X>=0&&Y>=0&&X<hs&&Y<hs)h[(Y*hs+X)*2+ch]=1}));return h}
 
 /* ---------- Trainingsdaten (nur TRAIN-Bilder, nie TEST) ---------- */
-function units(m,split){const u=[];ds.filter(i=>i.split===split&&!i.auto).forEach(it=>{const d=done(it);if(m==1){if(d.length)u.push({it})}else d.forEach(q=>u.push({it,d:q}))});return u}
+function units(m,split){const u=[];ds.filter(i=>i.split===split&&!i.auto).forEach(it=>{const d=done(it);if(m==1){if(d.length||it.rev)u.push({it})}else d.forEach(q=>u.push({it,d:q}))});return u}
 function sample(u,m,size,stride,aug){const it=u.it;let T=baseT(it,m,u.d&&u.d.tip,u.d&&u.d.flight,aug),g=[1,1,1],o=0;
  if(aug){T=withAug(T);const gb=.7+.6*Math.random();g=[0,0,0].map(()=>gb*(.9+.2*Math.random()));o=(Math.random()-.5)*.2}
  const c=render(it,T,size),L=m==1?done(it):[u.d],P=k=>L.map(q=>ap(T,q[k])),ex={tip:[],flight:[]};
- if(aug&&m==1&&$('cp').checked&&pool.length)for(let n=Math.random()*3|0;n>0;n--)paste(c,size,ex);
+ if(aug&&m==1&&$('cp').checked&&pool.length)for(let n=m==1&&!L.length?(Math.random()<.6?0:1):Math.random()*3|0;n>0;n--)paste(c,size,ex);
  const x=tf.browser.fromPixels(c);
  let tp=P('tip').concat(ex.tip),fl=P('flight').concat(ex.flight),hI=null;const pj=aug?+$('persp').value:0;
  if(pj>0){const S=[[0,0],[size,0],[size,size],[0,size]],R=()=>(Math.random()*2-1)*pj*size,D=S.map(([a,b])=>[a+R(),b+R()]),hF=homog(S,D),mp=p=>hp(hF,p[0]*size,p[1]*size).map(v=>v/size);hI=homog(D,S);tp=tp.map(mp);fl=fl.map(mp)}
  const Hc=it.cal&&(!aug||Math.random()>.25)?it.cal.H:null,e=exCh(Hc,size,(a,b)=>{let X=a*size,Y=b*size;if(hI)[X,Y]=hp(hI,X,Y);return inv(T,[X/size,Y/size])});
  return{x,g,o,hI,e,n:aug,h:heat(tp,fl,size/stride)}}
-function paste(c,size,ex){const q=pool[Math.random()*pool.length|0],it=q.it,W=it.img.naturalWidth,H=it.img.naturalHeight,t=q.d.tip,f=q.d.flight,
+function paste(c,size,ex){let q=pool[Math.random()*pool.length|0];for(let n=0;n<8;n++){const w_=q.it.img.naturalWidth,h_=q.it.img.naturalHeight,l_=Math.hypot((q.d.tip.x-q.d.flight.x)*w_,(q.d.tip.y-q.d.flight.y)*h_),r_=Math.max(l_*1.6,.06*Math.max(w_,h_))*.66,m_=[(q.d.tip.x+q.d.flight.x)/2*w_,(q.d.tip.y+q.d.flight.y)/2*h_];if(!done(q.it).some(o=>o!==q.d&&[o.tip,o.flight].some(p=>Math.hypot(p.x*w_-m_[0],p.y*h_-m_[1])<r_)))break;q=pool[Math.random()*pool.length|0]}
+ const it=q.it,W=it.img.naturalWidth,H=it.img.naturalHeight,t=q.d.tip,f=q.d.flight,
  len=Math.hypot((t.x-f.x)*W,(t.y-f.y)*H),side=Math.max(len*1.6,.06*Math.max(W,H))*1.2,mx=(t.x+f.x)/2*W,my=(t.y+f.y)/2*H,
  a=Math.random()*6.283,k=size/Math.sqrt(W*H)*(.8+.4*Math.random()),dx=size*(.12+.76*Math.random()),dy=size*(.12+.76*Math.random()),x=c.getContext('2d');
  x.save();x.setTransform(1,0,0,1,0,0);x.translate(dx,dy);x.rotate(a);x.scale(k,k);x.translate(-mx,-my);x.beginPath();x.arc(mx,my,side/2,0,7);x.clip();x.drawImage(it.img,0,0);x.restore();
@@ -869,13 +871,16 @@ function pack(S,hs){const B=S.length,xs=tf.tidy(()=>{let x=tf.stack(S.map(s=>s.x
  S.forEach(s=>s.x.dispose());const a=new Float32Array(B*hs*hs*2);S.forEach((s,i)=>a.set(s.h,i*hs*hs*2));return{xs,ys:tf.tensor4d(a,[B,hs,hs,2])}}
 
 /* ---------- Modell ---------- */
-const wLoss=(yt,yp)=>tf.mean(tf.mul(tf.square(tf.sub(yt,yp)),tf.add(1,tf.mul(yt,30))));
+/* Focal-Loss für Heatmaps (CenterNet): scharfe Peaks, kaum Fehlalarme */
+const focal=(yt,yp)=>tf.tidy(()=>{const p=tf.clipByValue(yp,1e-4,1-1e-4),pos=tf.cast(tf.greaterEqual(yt,.999),'float32'),neg=tf.sub(1,pos),
+ pl=tf.mul(tf.mul(tf.log(p),tf.square(tf.sub(1,p))),pos),nl=tf.mul(tf.mul(tf.mul(tf.log(tf.sub(1,p)),tf.square(p)),tf.pow(tf.sub(1,yt),4)),neg);
+ return tf.neg(tf.div(tf.add(tf.sum(pl),tf.sum(nl)),tf.maximum(tf.sum(pos),1)))});
 function build(size,pools,lr){const i=tf.input({shape:[size,size,6]});let x=i;
- const c=f=>{x=tf.layers.conv2d({filters:f,kernelSize:3,padding:'same',activation:'relu'}).apply(x)},p=()=>{x=tf.layers.maxPooling2d({poolSize:2}).apply(x)};
+ const c=f=>{x=tf.layers.conv2d({filters:f,kernelSize:3,padding:'same',useBias:false}).apply(x);x=tf.layers.batchNormalization({momentum:.9}).apply(x);x=tf.layers.activation({activation:'relu'}).apply(x)},p=()=>{x=tf.layers.maxPooling2d({poolSize:2}).apply(x)};
  c(16);p();c(32);if(pools>1)p();c(48);c(48);const f=x;
  p();c(64);c(64);c(64);x=tf.layers.upSampling2d({size:[2,2]}).apply(x);x=tf.layers.concatenate().apply([x,f]);c(48);c(32); // grober Pfad = großes Sichtfeld, ohne Dilation (TF.js kann Dilation nicht trainieren)
- const o=tf.layers.conv2d({filters:2,kernelSize:1,padding:'same',activation:'sigmoid'}).apply(x),m=tf.model({inputs:i,outputs:o});
- m.compile({optimizer:tf.train.adam(lr),loss:wLoss});return m}
+ const o=tf.layers.conv2d({filters:2,kernelSize:1,padding:'same',activation:'sigmoid',biasInitializer:tf.initializers.constant({value:-2.2})}).apply(x),m=tf.model({inputs:i,outputs:o});
+ m.compile({optimizer:tf.train.adam(lr),loss:focal});return m}
 const shuf=a=>{for(let i=a.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[a[i],a[j]]=[a[j],a[i]]}};
 function chart(){const c=$('chart'),x=c.getContext('2d');x.clearRect(0,0,c.width,c.height);const all=[...hist.t,...hist.v.filter(v=>v!=null)];if(!all.length)return;const mx=Math.max(...all),n=hist.t.length;
  [[hist.t,'#00ff88'],[hist.v,'#ffd43b']].forEach(([a,col])=>{x.strokeStyle=col;x.beginPath();let st=0;a.forEach((v,i)=>{if(v==null)return;const X=n>1?i/(n-1)*c.width:0,Y=c.height-v/mx*(c.height-8)-4;st?x.lineTo(X,Y):x.moveTo(X,Y);st=1});x.stroke()})}
@@ -887,17 +892,20 @@ async function trainModel(m,size){
  if(tr.length<4)return log(`Zu wenig Trainingsdaten (${tr.length}). Empfohlen: mindestens ~20 Bilder bzw. Darts.`);
  training=true;stopF=false;hist={t:[],v:[]};updateUI();
  let net;
- if($('cont').checked&&nets[m]&&nets[m].size===size&&nets[m].net.inputs[0].shape[3]==6&&!nets[m].net.layers.some(l=>l.dilationRate&&l.dilationRate[0]>1)){net=nets[m].net;net.compile({optimizer:tf.train.adam(lr),loss:wLoss})}
+ if($('cont').checked&&nets[m]&&nets[m].size===size&&nets[m].net.inputs[0].shape[3]==6&&nets[m].net.layers.some(l=>l.getClassName()==='BatchNormalization')){net=nets[m].net;net.compile({optimizer:tf.train.adam(lr),loss:focal})}
  else{if(nets[m])nets[m].net.dispose();net=build(size,m==1?2:1,lr)}
  nets[m]={net,size,stride};
  log(`Training ${m==1?'Apex':'Sniper'}: ${tr.length} Train-Einheiten, ${va.length} Test-Einheiten (nur zur Bewertung)${skip?`, ${skip} ungeprüfte Auto-Bilder ausgeschlossen`:''}, ${net.countParams()} Parameter, Backend ${tf.getBackend()}.`);
+ let bestS=1e9,bestE=0,bestW=null;const PAT=Math.max(15,Math.round(E*.3));
  try{for(let e=0;e<E&&!stopF;e++){
-  shuf(tr);let sum=0,n=0;
+  shuf(tr);let sum=0,n=0;try{net.optimizer.learningRate=lr*(.05+.95*.5*(1+Math.cos(Math.PI*e/E)))}catch(_){}
   for(let i=0;i<tr.length;i+=B){const S=tr.slice(i,i+B).map(u=>sample(u,m,size,stride,aug)),{xs,ys}=pack(S,hs),l=await net.trainOnBatch(xs,ys);xs.dispose();ys.dispose();sum+=l*S.length;n+=S.length;await tf.nextFrame()}
   let vl=null;if(va.length){let vs=0,vn=0;for(let i=0;i<va.length;i+=B){const S=va.slice(i,i+B).map(u=>sample(u,m,size,stride,false)),{xs,ys}=pack(S,hs),t=net.evaluate(xs,ys,{batchSize:B});vs+=(await t.data())[0]*S.length;vn+=S.length;t.dispose();xs.dispose();ys.dispose()}vl=vs/vn}
   hist.t.push(sum/n);hist.v.push(vl);chart();$('status').textContent=`Epoche ${e+1}/${E} · Loss ${(sum/n).toFixed(5)}${vl!=null?' · Test '+vl.toFixed(5):''}`;
-  if((e+1)%5==0||e==0)log($('status').textContent)}
-  log(stopF?'Training gestoppt.':'Training abgeschlossen.')}
+  if((e+1)%5==0||e==0)log($('status').textContent);
+  const sc=vl!=null?vl:sum/n;if(sc<bestS){bestS=sc;bestE=e;if(bestW)bestW.forEach(w=>w.dispose());bestW=net.getWeights().map(w=>w.clone())}else if(e-bestE>=PAT){log(`Early Stop: seit ${PAT} Epochen keine Verbesserung.`);break}}
+  if(bestW){net.setWeights(bestW);bestW.forEach(w=>w.dispose());log(`Beste Epoche ${bestE+1} wiederhergestellt (${va.length?'Test':'Train'}-Loss ${bestS.toFixed(5)}).`)}
+  log(stopF?'Training gestoppt.':'Training abgeschlossen.');if(m==1&&va.length&&!stopF)await tuneThr()}
  catch(err){log('Trainingsfehler: '+err.message)}
  training=false;updateUI()}
 $('b-train').onclick=()=>trainModel(active,+$('size').value);
@@ -910,21 +918,27 @@ async function runNet(m,it,T){const{net,size,stride}=nets[m],c=render(it,T,size)
 async function refine(it,dt){const T=baseT(it,2,dt.tip,dt.flight,false),{d,hs}=await runNet(2,it,T),t=peaks(d,hs,0,.1,1)[0],f=peaks(d,hs,1,.1,1)[0];
  return t&&f?{tip:inv(T,[t.x,t.y]),flight:inv(T,[f.x,f.y])}:dt}
 async function pipeline(it){let r;
- if(nets[1]){const o=await runNet(1,it,I),th=+$('thr').value;r=pair(peaks(o.d,o.hs,0,th,MAXD),peaks(o.d,o.hs,1,th,MAXD))}
+ if(nets[1]){const o=await runNet(1,it,I);r=decodeApex(o,+$('thr').value)}
  else r=done(it).map(d=>({tip:{...d.tip},flight:{...d.flight}}));
  if(nets[2])for(let i=0;i<r.length;i++)r[i]=await refine(it,r[i]);return r}
 $('b-pred').onclick=async()=>{const it=ds[cur];if(!it||(!nets[1]&&!nets[2]))return;
  it.preds=await pipeline(it);log(`${it.preds.length} Dart(s) erkannt (${nets[1]?'Apex':'Annotation'}${nets[2]?' + Sniper':''}).`);draw()};
 $('b-take').onclick=()=>{const it=ds[cur];if(it&&it.preds&&it.preds.length){it.darts=it.preds.slice(0,MAXD).map(p=>({tip:{...p.tip},flight:{...p.flight}}));it.preds=[];it.auto=true;updateUI();log('Vorschlag übernommen – prüfen/korrigieren, dann ✔ Geprüft.')}};
-$('b-eval').onclick=async()=>{if(!nets[1]&&!nets[2])return;let items=ds.filter(i=>i.split==='val'&&!i.auto&&done(i).length);
- if(!items.length)return log('Kein TEST-Bild mit Annotation. Test-Bilder markieren (TEST oder Auto-Split).');
- let gt=0,hit=0,fp=0,et=0,ef=0;const by=[0,1,2].map(()=>({g:0,h:0}));
- for(const it of items){const W=it.img.naturalWidth,H=it.img.naturalHeight,P=await pipeline(it),used=new Set,bc=by[it.lc];
-  for(const g of done(it)){gt++;bc.g++;let b=-1,bd=1e9;P.forEach((p,i)=>{const e=Math.hypot((p.tip.x-g.tip.x)*W,(p.tip.y-g.tip.y)*H);if(!used.has(i)&&e<bd){bd=e;b=i}});
-   if(b>=0&&bd<.04*Math.max(W,H)){used.add(b);hit++;bc.h++;et+=bd;ef+=Math.hypot((P[b].flight.x-g.flight.x)*W,(P[b].flight.y-g.flight.y)*H)}}
-  fp+=P.length-used.size}
- log(`TEST (${items.length} Bilder, nie trainiert): ${hit}/${gt} Darts gefunden (${(100*hit/Math.max(1,gt)).toFixed(0)} %), ${fp} Fehlalarme, Ø Spitzenfehler ${(et/Math.max(1,hit)).toFixed(1)} px, Ø Flightfehler ${(ef/Math.max(1,hit)).toFixed(1)} px.`);
- by.forEach((v,i)=>v.g&&log(`   ${LICO[i]} ${LNAME[i]}: ${v.h}/${v.g} gefunden`))};
+function matchDarts(P,G,W,H){const used=new Set,hits=[];G.forEach(g=>{let b=-1,bd=1e9;P.forEach((p,i)=>{const e=Math.hypot((p.tip.x-g.tip.x)*W,(p.tip.y-g.tip.y)*H);if(!used.has(i)&&e<bd){bd=e;b=i}});if(b>=0&&bd<.04*Math.max(W,H)){used.add(b);hits.push({g,p:P[b],e:bd})}});return{hits,fp:P.length-used.size}}
+async function tuneThr(){if(!nets[1])return;const items=ds.filter(i=>i.split==='val'&&!i.auto&&(done(i).length||i.rev));if(!items.length)return log('Schwelle: kein geprüftes TEST-Bild vorhanden.');
+ const R=[];for(const it of items){R.push({it,o:await runNet(1,it,I)});await tf.nextFrame()}
+ let best=null;for(let k=18;k>=2;k--){const t=k*.05;let tp=0,fp=0,fn=0;R.forEach(({it,o})=>{const G=done(it),M=matchDarts(decodeApex(o,t),G,it.img.naturalWidth,it.img.naturalHeight);tp+=M.hits.length;fn+=G.length-M.hits.length;fp+=M.fp});
+  const pr=tp/Math.max(1,tp+fp),rc=tp/Math.max(1,tp+fn),f=1.25*pr*rc/Math.max(1e-9,.25*pr+rc);if(!best||f>best.f+1e-9)best={t,f,pr,rc,fp}}
+ $('thr').value=best.t.toFixed(2);log(`Beste Erkennungsschwelle ${best.t.toFixed(2)} automatisch gesetzt: Präzision ${Math.round(best.pr*100)} %, Recall ${Math.round(best.rc*100)} %, ${best.fp} Fehlalarme auf ${items.length} TEST-Bildern.`);return best}
+$('b-tune').onclick=()=>{if(!training&&!busy)tuneThr()};
+$('b-eval').onclick=async()=>{if(!nets[1]&&!nets[2])return;const items=ds.filter(i=>i.split==='val'&&!i.auto&&(done(i).length||i.rev));
+ if(!items.length)return log('Kein geprüftes TEST-Bild. Test-Bilder markieren (TEST oder Auto-Split) und prüfen (leere Bilder mit ✔ bestätigen).');
+ let gt=0,hit=0,fp=0,et=0,ef=0,exact=0;const by=[0,1,2].map(()=>({n:0,x:0}));
+ for(const it of items){const W=it.img.naturalWidth,H=it.img.naturalHeight,P=await pipeline(it),G=done(it),M=matchDarts(P,G,W,H),bc=by[it.lc];gt+=G.length;hit+=M.hits.length;fp+=M.fp;bc.n++;
+  M.hits.forEach(h=>{et+=h.e;ef+=Math.hypot((h.p.flight.x-h.g.flight.x)*W,(h.p.flight.y-h.g.flight.y)*H)});
+  if(P.length===G.length&&M.fp===0&&M.hits.length===G.length){exact++;bc.x++}}
+ log(`TEST (${items.length} Bilder, nie trainiert): Dart-Anzahl exakt richtig in ${exact}/${items.length} Bildern · Recall ${(100*hit/Math.max(1,gt)).toFixed(0)} % (${hit}/${gt}) · Präzision ${(100*hit/Math.max(1,hit+fp)).toFixed(0)} % (${fp} Fehlalarme) · Ø Spitzenfehler ${(et/Math.max(1,hit)).toFixed(1)} px, Flight ${(ef/Math.max(1,hit)).toFixed(1)} px.`);
+ by.forEach((v,i)=>v.n&&log(`   ${LICO[i]} ${LNAME[i]}: Anzahl exakt in ${v.x}/${v.n} Bildern`))};
 
 /* ---------- Export / Import Modell ---------- */
 $('b-exp').onclick=async()=>{const n=nets[active];if(!n)return;const nm=active==1?'apex-board-finder':'sniper-crop-analyzer';
@@ -936,7 +950,7 @@ $('i-mod').onchange=async e=>{const f=[...e.target.files];e.target.value='';cons
   if(nets[active])nets[active].net.dispose();nets[active]={net,size,stride};log(`Modell geladen (${size}×${size}×${net.inputs[0].shape[3]}, Stride ${stride}) für ${active==1?'Apex':'Sniper'}.`);updateUI()}
  catch(err){log('Modellfehler: '+err.message)}};
 $('b-snip').onclick=()=>{const s=$('snip'),n=nets[active],nm=active==1?'apex-board-finder':'sniper-crop-analyzer',sz=n?n.size:128;
- s.value=`// TF.js einbinden, Dateien ${nm}.json + ${nm}.weights.bin neben die HTML legen.\n// Modell-Eingabe: ${sz}x${sz}x6 = RGB/255 + 3 Board-Koordinaten-Kanäle (Ganzbild gestaucht, Apex).\n// Hc = Homographie Bild(0..1)->Board aus der 19-Punkt-Kalibrierung (8 Werte, siehe JSON-Export "cal.H"), oder null.\nconst M=await tf.loadLayersModel('${nm}.json');\nconst hp=${hp};\n${peaks}\n${pair}\n${exCh}\nfunction detect(source,Hc=null,size=${sz},thr=.3){\n const c=document.createElement('canvas');c.width=c.height=size;c.getContext('2d').drawImage(source,0,0,size,size);\n const ex=tf.tensor4d(exCh(Hc,size,(u,v)=>({x:u,y:v})),[1,size,size,3]);\n const h=tf.tidy(()=>M.predict(tf.concat([tf.browser.fromPixels(c).toFloat().div(255).expandDims(0),ex],3)).dataSync());ex.dispose();\n const s=Math.sqrt(h.length/2);return pair(peaks(h,s,0,thr,3),peaks(h,s,1,thr,3)); // normiert 0..1\n}`;
+ s.value=`// TF.js einbinden, Dateien ${nm}.json + ${nm}.weights.bin neben die HTML legen.\n// Modell-Eingabe: ${sz}x${sz}x6 = RGB/255 + 3 Board-Koordinaten-Kanäle (Ganzbild gestaucht, Apex).\n// Hc = Homographie Bild(0..1)->Board aus der 19-Punkt-Kalibrierung (8 Werte, siehe JSON-Export "cal.H"), oder null.\nconst M=await tf.loadLayersModel('${nm}.json');\nconst hp=${hp};\n${peaks}\n${pair}\n${exCh}\nfunction detect(source,Hc=null,size=${sz},thr=${+$('thr').value||.3}){\n const c=document.createElement('canvas');c.width=c.height=size;c.getContext('2d').drawImage(source,0,0,size,size);\n const ex=tf.tensor4d(exCh(Hc,size,(u,v)=>({x:u,y:v})),[1,size,size,3]);\n const h=tf.tidy(()=>M.predict(tf.concat([tf.browser.fromPixels(c).toFloat().div(255).expandDims(0),ex],3)).dataSync());ex.dispose();\n const s=Math.sqrt(h.length/2);return pair(peaks(h,s,0,thr,3),peaks(h,s,1,thr,3)); // normiert 0..1\n}`;
  s.hidden=false;s.select();navigator.clipboard&&navigator.clipboard.writeText(s.value).catch(()=>{});log('Einbau-Code kopiert.')};
 
 /* ---------- Mathematische Dart-Erkennung (wie camera_tablet: Differenz zum leeren Board) ---------- */
@@ -974,8 +988,8 @@ $('b-chk').onclick=()=>{const it=ds[cur];if(it){it.auto=false;it.rev=true;it.pre
 /* ---------- Datensatz laden / speichern ---------- */
 async function addImg(url,name,split){const img=await new Promise((ok,no)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=no;i.src=url}),t=document.createElement('canvas');t.width=160;t.height=Math.round(160*img.naturalHeight/img.naturalWidth);t.getContext('2d').drawImage(img,0,0,t.width,t.height);
  const g=grayOf(img);let s=0,q=0;for(const v of g.g){s+=v;q+=v*v}const mu=s/g.g.length;ds.push({name,url,img,th:t.toDataURL('image/jpeg',.7),g,mu,sd:Math.sqrt(q/g.g.length-mu*mu),key:img.naturalWidth+'x'+img.naturalHeight,split,lc:1,darts:[],preds:[],cal:null,auto:false,rev:false})}
-function applyAnn(list){let n=0;list.forEach(a=>{const it=ds.find(d=>d.name===a.name&&!d.darts.length);if(it){it.split=a.split||it.split;it.darts=(a.darts||[]).slice(0,MAXD);it.auto=!!a.auto;it.rev=!it.auto&&(a.darts||[]).length>0;if(a.cal&&a.cal.pts&&a.cal.pts.length==19)it.cal=fitCal(a.cal.pts);n++}});return n}
-const annList=()=>ds.filter(d=>done(d).length||d.cal).map(d=>({name:d.name,split:d.split,auto:d.auto,darts:done(d),cal:d.cal&&{pts:d.cal.pts,H:d.cal.H,rms:d.cal.rms}}));
+function applyAnn(list){let n=0;list.forEach(a=>{const it=ds.find(d=>d.name===a.name&&!d.darts.length);if(it){it.split=a.split||it.split;it.darts=(a.darts||[]).slice(0,MAXD);it.auto=!!a.auto;it.rev=!it.auto&&(a.rev!=null?!!a.rev:(a.darts||[]).length>0);if(a.cal&&a.cal.pts&&a.cal.pts.length==19)it.cal=fitCal(a.cal.pts);n++}});return n}
+const annList=()=>ds.filter(d=>done(d).length||d.cal||d.rev).map(d=>({name:d.name,split:d.split,auto:d.auto,rev:d.rev,darts:done(d),cal:d.cal&&{pts:d.cal.pts,H:d.cal.H,rms:d.cal.rms}}));
 const dl=(blob,name)=>{const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click()};
 $('b-zip').onclick=()=>$('i-zip').click();$('b-imgs').onclick=()=>$('i-imgs').click();$('b-json').onclick=()=>$('i-json').click();
 $('i-zip').onchange=async e=>{const f=e.target.files[0];if(!f)return;e.target.value='';
