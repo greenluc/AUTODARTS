@@ -51,18 +51,28 @@
             height: 100dvh;
             max-height: 100dvh;
             overflow: hidden;
+            transition: grid-template-columns .3s cubic-bezier(.22, 1, .36, 1);
         }
+        .app-shell.nav-collapsed { grid-template-columns: 0 minmax(0, 1fr); }
 
         .app-sidebar {
             height: 100dvh;
-            display: flex;
-            flex-direction: column;
-            padding: 16px 12px 14px;
+            min-width: 0;
             background: rgba(10, 13, 23, 0.96);
             border-right: 1px solid var(--glass-border);
-            z-index: 20;
-            overflow-y: auto;
+            z-index: 40;
+            overflow: hidden;
         }
+        .sidebar-inner { width: 220px; height: 100%; display: flex; flex-direction: column; padding: 16px 12px 14px; overflow-y: auto; }
+        .app-shell.nav-collapsed .app-sidebar { visibility: hidden; border-right-color: transparent; transition: visibility 0s .3s; }
+        .nav-scrim { position: fixed; inset: 0; z-index: 39; background: rgba(3, 5, 10, .6); opacity: 0; pointer-events: none; transition: opacity .3s ease; }
+        .nav-toggle { flex: none; width: 44px; height: 44px; display: grid; place-items: center; border-radius: 12px; border: 1px solid var(--glass-border); background: rgba(255, 255, 255, .04); color: #cbd5e1; cursor: pointer; touch-action: manipulation; transition: background .15s, color .15s, border-color .15s; }
+        .nav-toggle:hover { background: rgba(255, 255, 255, .09); color: #fff; }
+        .nav-toggle:focus-visible, .side-link:focus-visible, .side-sub-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+        .nav-toggle svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+        .nav-toggle .nav-pane { fill: currentColor; stroke: none; opacity: .28; transition: opacity .25s, transform .3s; transform-origin: 3px 12px; }
+        .nav-toggle[aria-expanded="false"] .nav-pane { opacity: 0; transform: scaleX(.2); }
+        .top-left { display: flex; align-items: center; gap: 12px; min-width: 0; }
 
         .sidebar-brand { display: flex; align-items: center; gap: 10px; padding: 0 8px 20px; }
         .brand-mark { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: linear-gradient(145deg, #00ff88, #00a96a); color: #07140e; font: 700 22px Rajdhani, sans-serif; box-shadow: 0 0 20px rgba(0, 255, 136, .2); }
@@ -103,7 +113,7 @@
             gap: 10px;
             flex-shrink: 0;
         }
-        .workspace-top h2 { font: 700 1.3rem Rajdhani, sans-serif; letter-spacing: .02em; line-height: 1.1; }
+        .workspace-top h2 { margin: 0; font: 700 1.3rem Rajdhani, sans-serif; letter-spacing: .02em; line-height: 1.1; }
         .workspace-chip { display: flex; align-items: center; gap: 6px; padding: 5px 10px; border: 1px solid var(--glass-border); border-radius: 99px; background: rgba(255, 255, 255, .035); font-size: .7rem; color: #b6c0d2; }
 
         .screen-panel {
@@ -365,6 +375,16 @@
             object-fit: contain;
             box-shadow: none;
         }
+
+        /* Quadratische Kamerabilder: größtmögliches Quadrat im verfügbaren Platz */
+        .camera-stage { flex: 1 1 0; min-height: 0; container-type: size; display: grid; place-items: center; }
+        .camera-stage > .camera-wrapper { width: min(100cqw, 100cqh); height: auto; aspect-ratio: 1 / 1; flex: none; min-height: 0; }
+
+        /* Kalibrier-Modus: Kamera wird groß und quadratisch eingeblendet */
+        body.cal-mode::before { content: ""; position: fixed; inset: 0; z-index: 59; background: rgba(3, 5, 10, .86); }
+        body.cal-mode .hub-card { backdrop-filter: none; -webkit-backdrop-filter: none; }
+        .camera-view.is-calibrating { position: fixed; inset: 10px; z-index: 60; padding: 10px; background: #0b0e19; border-radius: 14px; border-color: rgba(0, 255, 136, .5); box-shadow: 0 20px 60px rgba(0, 0, 0, .7); }
+        .camera-view.is-calibrating .camera-active-body { gap: 8px; }
 
         /* Schöne, strukturierte Kalibrierungs-Steuerung pro Kamera */
         .cal-control-card {
@@ -677,75 +697,58 @@
         #throw-total { font-family: 'Rajdhani', sans-serif; font-size: 1.45rem; color: var(--accent); }
         .throw-sep { padding: 5px 4px; color: var(--accent); font-weight: 700; font-size: .8rem; border-bottom: 1px dashed var(--glass-border); }
 
-        /* Treffer-Blinken & Schöner Dart-SVG Stil */
-        .hit-sector {
-            fill: #ffe45c !important;
-            stroke: #fff4a3 !important;
-            filter: drop-shadow(0 0 6px #ffd93d);
-            animation: hitBlink 0.65s ease-in-out infinite;
+        /* Treffer-Markierung: ein einheitlicher, deckender Gelbton (kein Durchscheinen der Feldfarbe) */
+        .hit-sector, .hit-ring {
+            fill: #f5c518;
+            stroke: #fff1a8;
+            stroke-width: .6;
+            animation: hitTone 2.8s ease-in-out infinite;
         }
-        .hit-sector-secondary {
-            fill: rgba(255, 228, 92, 0.32) !important;
-            stroke: rgba(255, 244, 163, 0.65) !important;
-            animation: hitBlinkSoft 0.65s ease-in-out infinite;
+        @keyframes hitTone { 0%, 100% { fill: #f2c01a; } 50% { fill: #ffe780; } }
+
+        .dart-pos { pointer-events: none; }
+        .dart-fly { transform-box: view-box; transform-origin: 0 0; animation: dartFly .62s cubic-bezier(.3, .6, .4, 1) both; }
+        .dart-shadow { animation: fadeIn .3s .45s both; }
+        @keyframes dartFly {
+            0%   { transform: translate(78px, 0) scale(2.7); opacity: 0; }
+            14%  { opacity: 1; }
+            68%  { transform: translate(0, 0) scale(1.12); }
+            82%  { transform: translate(-1.8px, 0) scale(.97); }
+            100% { transform: translate(0, 0) scale(1); opacity: 1; }
         }
-        .hit-ring {
-            fill: rgba(255, 225, 65, .92) !important;
-            stroke: #fff7bd !important;
-            filter: drop-shadow(0 0 6px #ffd93d);
-            animation: hitBlink 0.65s ease-in-out infinite;
-        }
-        .hit-marker {
-            fill: #fff;
-            stroke: #ff9f1c;
-            stroke-width: 1.6;
-            filter: drop-shadow(0 0 4px #ffd93d);
-        }
-        .hit-marker-pulse {
-            fill: none;
-            stroke: #ffe45c;
-            stroke-width: 1.5;
-            animation: markerPulse 1.2s ease-out infinite;
-        }
-        .dart-svg-group {
-            filter: drop-shadow(2px 4px 4px rgba(0, 0, 0, 0.65));
-            animation: dartLand 0.28s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-        }
-        @keyframes hitBlink {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.25; }
-        }
-        @keyframes hitBlinkSoft {
-            0%, 100% { opacity: 0.85; }
-            50% { opacity: 0.2; }
-        }
-        @keyframes markerPulse {
-            0% { r: 3; opacity: 1; }
-            100% { r: 12; opacity: 0; }
-        }
-        @keyframes dartLand {
-            0% { transform: scale(1.45) translate(-6px, -6px); opacity: 0.3; }
-            100% { transform: scale(1) translate(0, 0); opacity: 1; }
+        .hit-point { transform-box: view-box; transform-origin: 0 0; transform: scale(0); animation: pointIn .22s .5s cubic-bezier(.3, 1.6, .5, 1) forwards; }
+        .hit-dot { fill: #ff2d2d; stroke: #fff; stroke-width: .9; }
+        .hit-halo { fill: rgba(255, 45, 45, .3); animation: halo 2.8s 1.2s ease-in-out infinite; }
+        .dart-pos:not(.latest) .hit-halo { animation: none; opacity: 0; }
+        .impact-ring { fill: none; stroke: #ff4b4b; stroke-width: 1.3; opacity: 0; animation: impactRing .75s .52s ease-out forwards; }
+        @keyframes pointIn { from { transform: scale(0); } to { transform: scale(1); } }
+        @keyframes impactRing { 0% { r: 2; opacity: .95; } 100% { r: 14; opacity: 0; } }
+        @keyframes halo { 0%, 100% { opacity: .25; } 50% { opacity: .85; } }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .legend-point { background: #ff2d2d; box-shadow: 0 0 6px rgba(255, 45, 45, .7); }
+        @media (prefers-reduced-motion: reduce) {
+            .hit-sector, .hit-ring { animation: none; }
+            .dart-fly, .hit-point, .dart-shadow, .impact-ring, .hit-halo { animation: none; }
+            .hit-point { transform: none; }
         }
         .yolo-box { display: grid; gap: 8px; padding-top: 6px; }
 
         /* Responsive Anpassungen */
+        /* Tablet (z. B. Galaxy Tab S9 FE) und kleiner: Sidebar fährt als Drawer über den Inhalt */
+        @media (max-width: 1280px) {
+            .app-shell, .app-shell.nav-collapsed { grid-template-columns: minmax(0, 1fr); }
+            .app-sidebar { position: fixed; left: 0; top: 0; bottom: 0; width: 272px; transform: translateX(-102%); transition: transform .3s cubic-bezier(.22, 1, .36, 1), box-shadow .3s; }
+            .sidebar-inner { width: 272px; padding-left: max(12px, env(safe-area-inset-left)); }
+            .app-shell.nav-open .app-sidebar { transform: none; box-shadow: 14px 0 44px rgba(0, 0, 0, .55); }
+            .app-shell.nav-open .nav-scrim { opacity: 1; pointer-events: auto; }
+            .side-link { padding: 12px 10px; }
+            .side-sub-link { padding: 8px 8px; }
+        }
         @media (max-width: 980px) {
-            .app-shell { grid-template-columns: 64px minmax(0, 1fr); }
-            .app-sidebar { padding: 14px 6px; }
-            .sidebar-brand { justify-content: center; padding: 0 0 18px; }
-            .sidebar-brand > div, .sidebar-caption, .sidebar-subgroup, .side-link b, .side-link small, .sidebar-bottom span:last-child { display: none; }
-            .side-link { justify-content: center; padding: 10px 4px; }
             .live-analysis-layout { grid-template-columns: minmax(0, 1.5fr) minmax(175px, 0.6fr); gap: 8px; }
+            .results-layout { grid-template-columns: 1fr; }
         }
         @media (max-width: 700px) {
-            .app-shell { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
-            .app-sidebar { height: auto; flex-direction: row; align-items: center; padding: 6px 8px; border-right: 0; border-bottom: 1px solid var(--glass-border); }
-            .sidebar-brand { padding: 0 6px 0 0; }
-            .brand-mark { width: 28px; height: 28px; font-size: 18px; }
-            .sidebar-brand > div, .sidebar-caption, .sidebar-subgroup, .sidebar-bottom { display: none; }
-            .side-link { width: auto; flex: 1; justify-content: center; gap: 5px; margin: 0; padding: 6px 4px; font-size: .72rem; }
-            .side-link b { display: block; }
             .live-analysis-layout { grid-template-columns: 1fr; }
             .live-board-preview { display: none; }
             .dual-camera-grid { grid-template-columns: 1fr; }
@@ -755,7 +758,8 @@
 <body>
 
     <div class="app-shell">
-      <aside class="app-sidebar" aria-label="Hauptnavigation">
+      <div class="nav-scrim" id="nav-scrim"></div>
+      <aside class="app-sidebar" id="app-sidebar" aria-label="Hauptnavigation"><div class="sidebar-inner">
         <div class="sidebar-brand"><span class="brand-mark">D</span><div><strong>DARTLY</strong><small>ARENA CONTROL</small></div></div>
         <div class="sidebar-caption">WORKSPACE</div>
         <button class="side-link active" data-screen="setup-screen"><span>◫</span><b>Live &amp; Setup</b><small>01</small></button>
@@ -772,11 +776,14 @@
           <button class="side-sub-link" data-screen="board-screen" data-scroll="throw-total">Punktestand</button>
         </div>
         <div class="sidebar-bottom"><span class="live-dot"></span><span>Lokale Analyse</span></div>
-      </aside>
+      </div></aside>
 
       <main class="workspace">
         <div class="workspace-top">
-            <div><span class="eyebrow">DARTLY ARENA / CONTROL CENTER</span><h2 id="screen-title">Live &amp; Setup</h2></div>
+            <div class="top-left">
+              <button class="nav-toggle" id="nav-toggle" type="button" aria-controls="app-sidebar" aria-expanded="true" aria-label="Seitenleiste ein- oder ausfahren"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/><rect class="nav-pane" x="3" y="4" width="6" height="16" rx="2"/></svg></button>
+              <div><span class="eyebrow">DARTLY ARENA / CONTROL CENTER</span><h2 id="screen-title">Live &amp; Setup</h2></div>
+            </div>
             <div class="workspace-chip"><i></i> Analyse bereit</div>
         </div>
 
@@ -858,9 +865,9 @@
                           <span class="cam-badge"><i></i><span id="camera-title-left">Kamera 1</span></span>
                           <span class="cam-state" id="camera-status-left">Nicht verbunden</span>
                         </div>
-                        <div class="camera-wrapper" id="camera-wrapper-left">
+                        <div class="camera-stage"><div class="camera-wrapper" id="camera-wrapper-left">
                           <video id="webcam" autoplay playsinline muted></video>
-                        </div>
+                        </div></div>
                         <div class="cal-control-card">
                           <div class="cal-source-row">
                             <select id="camera-source-left" title="Kameraquelle wählen"><option value="remote">Handy / WebRTC</option></select>
@@ -889,9 +896,9 @@
                           <span class="cam-badge"><i></i><span>Kamera 2</span></span>
                           <span class="cam-state" id="camera-status-right">Nicht verbunden</span>
                         </div>
-                        <div class="camera-wrapper" id="camera-wrapper-right">
+                        <div class="camera-stage"><div class="camera-wrapper" id="camera-wrapper-right">
                           <video id="webcam-right" autoplay playsinline muted></video>
-                        </div>
+                        </div></div>
                         <div class="cal-control-card">
                           <div class="cal-source-row">
                             <select id="camera-source-right" title="Kameraquelle wählen"><option value="remote">Handy / WebRTC</option></select>
@@ -920,9 +927,9 @@
                           <span class="cam-badge"><i></i><span>Kamera 3</span></span>
                           <span class="cam-state" id="camera-status-third">Nicht verbunden</span>
                         </div>
-                        <div class="camera-wrapper" id="camera-wrapper-third">
+                        <div class="camera-stage"><div class="camera-wrapper" id="camera-wrapper-third">
                           <video id="webcam-third" autoplay playsinline muted></video>
-                        </div>
+                        </div></div>
                         <div class="cal-control-card">
                           <div class="cal-source-row">
                             <select id="camera-source-third" title="Kameraquelle wählen"><option value="remote">Handy / WebRTC</option></select>
@@ -1000,7 +1007,7 @@
             <div class="hub-card board-card">
               <div class="board-heading"><div><span class="eyebrow">LIVE TREFFER-TRACKING</span><h3>Dein Dartboard</h3></div><span class="board-live"><i></i> LIVE</span></div>
               <div class="board-stage"><svg id="dartboard-svg" viewBox="0 0 220 220" role="img" aria-label="Dartboard mit markierten Treffern"></svg></div>
-              <div class="board-legend"><span><i class="legend-hit"></i> Trefferfeld (Groß / Klein)</span><span><i class="legend-dart"></i> Dart-Einschlag</span></div>
+              <div class="board-legend"><span><i class="legend-hit"></i> Trefferfeld</span><span><i class="legend-point"></i> Einschlagpunkt</span></div>
               <div class="last-hit-panel"><div><small>LETZTER TREFFER</small><strong id="board-last-hit">Noch kein Treffer</strong></div><strong class="last-hit-score" id="board-last-score">—</strong></div>
             </div>
             <div class="hub-card throws-card">
@@ -2091,7 +2098,7 @@ class MotionDetector {
     this.roi = roi; this.roiCount = Math.max(1, n);
   }
 
-  diff(a, b, { includeMask = true } = {}) {
+  diff(a, b, { includeMask = true, scale = 1 } = {}) {
     const N = a.length, roi = this.roi, step = Math.max(1, (N / 6000) | 0), hist = new Uint32Array(511);
     let cnt = 0;
     for (let i = 0; i < N; i += step) if (!roi || roi[i]) { hist[a[i] - b[i] + 255]++; cnt++; }
@@ -2101,7 +2108,7 @@ class MotionDetector {
     for (let k = 0; k < 511; k++) mh[Math.min(255, Math.abs(k - 255 - med))] += hist[k];
     let mad = 0; acc = 0;
     for (let k = 0; k < 256; k++) { acc += mh[k]; if (acc * 2 >= cnt) { mad = k; break; } }
-    const base = this.cfg.pixelThreshold, threshold = Math.min(base * 2.5, Math.max(base, Math.ceil(4.5 * 1.4826 * mad)));
+    const base = this.cfg.pixelThreshold, threshold = Math.max(scale < 1 ? 6 : 0, Math.min(base * 2.5, Math.max(base, Math.ceil(4.5 * 1.4826 * mad))) * scale);
     const m = includeMask ? new Uint8Array(N) : null; let n = 0;
     for (let i = 0; i < N; i++) if ((!roi || roi[i]) && Math.abs(a[i] - b[i] - med) > threshold) { if (m) m[i] = 1; n++; }
     this.lastDiffMetrics = { threshold, brightnessShift: med, noiseMad: mad };
@@ -2629,7 +2636,16 @@ class AutoDartsEngine {
 
   async calibrate(initial = null, note = '') {
     this._calibrating = true;
-    try { return await this._calibrate(initial, note); } finally { this._calibrating = false; }
+    const camView = this.cfg.container.closest && this.cfg.container.closest('.camera-view');
+    if (camView) camView.classList.add('is-calibrating');
+    document.body.classList.add('cal-mode');
+    try { return await this._calibrate(initial, note); }
+    finally {
+      this._calibrating = false;
+      if (camView) camView.classList.remove('is-calibrating');
+      document.body.classList.remove('cal-mode');
+      requestAnimationFrame(() => { this.layoutOverlays(); setTimeout(() => this.layoutOverlays(), 120); });
+    }
   }
 
   async _calibrate(initial, note) {
@@ -2906,13 +2922,22 @@ class AutoDartsEngine {
           this.pendingEndTurn = { g, cur };
           this.reference = g.slice(); this.refFull = cur; this.state = 'armed';
           this.updateReferenceInfo('empty', 'Leeres Board erkannt (wartet auf Pausenende)', 'Alle Darts wurden entnommen');
-          this.setStatus('Darts entnommen · Board leer'); return;
+          this.setStatus('Darts entnommen · Board leer'); this.emit('board-empty'); return;
         }
         this.endTurn(g, cur, 'removed'); return;
       }
     }
 
-    const blobs = this.motion.blobs(d.mask);
+    let blobs = this.motion.blobs(d.mask);
+    if (!blobs.length) {
+      // Zweiter Versuch mit empfindlicherer Schwelle (dunkler Dart auf dunklem Feld, schwacher Kontrast),
+      // damit ein kaum sichtbarer Dart nicht stillschweigend in die Referenz übernommen wird
+      const d2 = this.motion.diff(g, this.reference, { scale: 0.55 });
+      if (d2.ratio <= m.maxChangeRatio) {
+        blobs = this.motion.blobs(d2.mask);
+        if (blobs.length) console.info(`[Erkennung] Dart nur mit empfindlicher Schwelle gefunden (Δ ${d2.count} px)`);
+      }
+    }
     if (!blobs.length) {
       this.reference = g; this.refFull = cur; this.state = 'armed';
       this.setStatus(this.turnComplete ? 'Aufnahme beendet' : 'Bereit'); return;
@@ -2944,7 +2969,7 @@ class AutoDartsEngine {
             this.reference = g.slice(); this.refFull = cur; this.state = 'armed';
             this.clearMarks(); this.emitTurn();
             this.updateReferenceInfo('empty', 'Leeres Board erkannt (wartet auf Pausenende)', 'Alle Darts wurden entnommen');
-            this.setStatus('Alle Darts entnommen'); return;
+            this.setStatus('Alle Darts entnommen'); this.emit('board-empty'); return;
           }
           this.endTurn(g, cur, 'removed-all'); return;
         }
@@ -2973,14 +2998,19 @@ class AutoDartsEngine {
 
     const dart = { id: ++this.dartSeq, tip: loc.tip, flight: loc.flight, label: res.label, unsure: loc.unsure, conf: loc.conf };
     Object.assign(res, { cam: { x: loc.tip.x, y: loc.tip.y }, flight: loc.flight, confidence: loc.conf, source: loc.source, unsure: loc.unsure, dartId: dart.id, D: loc.D, cameraSide: loc.cameraSide || 'unknown', cameraBoardX: loc.cameraBoardX ?? null, ext: loc.ext });
+    if (loc.flight) {
+      const fU = this.undist(loc.flight), bf = Homography.apply(this.H, fU.x, fU.y);
+      if (isFinite(bf.x) && isFinite(bf.y)) res.boardFlight = { x: bf.x, y: bf.y };
+    }
     this.turnDarts.push(dart); this.drawMarks();
+    console.info(`[Erkennung] ${res.label} · Sicherheit ${Math.round(loc.conf * 100)} % · Quelle ${loc.source}` + (loc.D != null ? ` · Blickwinkel ${Math.round(loc.D)}°` : '') + (loc.unsure ? ' · unsicher' : '') + (loc.frames ? ` · ${loc.frames} Frames, Streuung ${loc.spread.toFixed(1)} px` : ''));
     const n = this.turnDarts.length;
     this.updateReferenceInfo(
       'dart',
       `Nach Dart ${n}: ${res.label} (${this.formatDartSequence(this.turnDarts)})`,
       n >= tn.darts ? 'Aufnahme komplett · Bereit zur Dart-Entnahme' : `Warte auf Dart ${n + 1} oder Entnahme`
     );
-    if (n >= tn.darts) { this.turnComplete = true; this.turnPauseUntil = Date.now() + 10000; this.setStatus(`${res.label} – ${tn.darts}/${tn.darts} erkannt · ${Math.round(loc.conf * 100)} % sicher`); this.emit('turn-complete', { darts: this.turnDarts.slice() }); }
+    if (n >= tn.darts) { this.turnComplete = true; this.turnPauseUntil = 0; this.setStatus(`${res.label} – ${tn.darts}/${tn.darts} erkannt · ${Math.round(loc.conf * 100)} % sicher`); this.emit('turn-complete', { darts: this.turnDarts.slice() }); }
     else this.setStatus(`${res.label} – Dart ${n}/${tn.darts} · ${Math.round(loc.conf * 100)} % sicher`);
     this.emitTurn();
     this.emit('throw', res);
@@ -3222,114 +3252,72 @@ document.addEventListener('DOMContentLoaded', async () => {
     const boardSvgs = [$('dartboard-svg'), $('setup-dartboard-svg')];
     boardSvgs.forEach(drawDartboard);
 
-    function createDartArrowSvg(NS, x, y, index = 0) {
-      // Leichte Winkel-Variation je nach Dart-Nummer, damit dicht beieinander steckende Darts realistisch wirken
-      const angleDeg = -38 + (index * 11);
-      const rad = angleDeg * Math.PI / 180;
-      const g = document.createElementNS(NS, 'g');
-      g.setAttribute('class', 'dart-svg-group');
-      g.setAttribute('transform', `translate(${x.toFixed(1)}, ${y.toFixed(1)}) rotate(${angleDeg})`);
-
-      const addEl = (tag, attrs) => {
-        const el = document.createElementNS(NS, tag);
-        for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
-        g.appendChild(el);
-        return el;
+    function createDartArrowSvg(NS, x, y, index = 0, measuredDeg = null) {
+      // Gemessene Neigung aus dem Kamerabild; ohne Messwert Ersatzwinkel je Dart
+      const angleDeg = measuredDeg != null ? measuredDeg : -38 + (index * 11);
+      const mk = (tag, attrs, parent) => {
+        const n = document.createElementNS(NS, tag);
+        for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+        if (parent) parent.appendChild(n);
+        return n;
       };
+      const pos = mk('g', { class: 'dart-pos latest', transform: `translate(${x.toFixed(2)} ${y.toFixed(2)})` });
+      const rot = mk('g', { transform: `rotate(${angleDeg}) scale(.82)` }, pos);
+      mk('line', { class: 'dart-shadow', x1: 1, y1: 1, x2: 17, y2: 9, stroke: 'rgba(0,0,0,0.2)', 'stroke-width': 1.6, 'stroke-linecap': 'round' }, rot);
+      const fly = mk('g', { class: 'dart-fly' }, rot);
+      mk('polygon', { points: '0,0 7,-0.9 7,0.9', fill: '#e2e8f0', stroke: '#334155', 'stroke-width': 0.3 }, fly);
+      mk('rect', { x: 7, y: -1.7, width: 13, height: 3.4, rx: 1.2, fill: 'url(#dart-barrel-grad)', stroke: '#1e293b', 'stroke-width': 0.45 }, fly);
+      [9.5, 11.5, 13.5, 15.5, 17.5].forEach(gx => mk('line', { x1: gx, y1: -1.6, x2: gx, y2: 1.6, stroke: '#334155', 'stroke-width': 0.55 }, fly));
+      mk('rect', { x: 20, y: -1.0, width: 9, height: 2.0, rx: 0.6, fill: '#1e293b', stroke: '#94a3b8', 'stroke-width': 0.35 }, fly);
+      mk('polygon', { points: '26,0.5 31,6.8 40,5.2 38,0.5', fill: '#0369a1', stroke: '#bae6fd', 'stroke-width': 0.45, 'stroke-linejoin': 'round' }, fly);
+      mk('polygon', { points: '26,-0.5 31,-6.8 40,-5.2 38,-0.5', fill: 'url(#dart-flight-grad)', stroke: '#e0f2fe', 'stroke-width': 0.5, 'stroke-linejoin': 'round' }, fly);
+      mk('line', { x1: 26, y1: 0, x2: 39, y2: 0, stroke: '#f0f9ff', 'stroke-width': 0.65, 'stroke-linecap': 'round' }, fly);
+      // Roter Einschlagpunkt (exakte Trefferposition), erscheint im Moment des Einschlags
+      mk('circle', { class: 'impact-ring', cx: 0, cy: 0, r: 2 }, pos);
+      const hp = mk('g', { class: 'hit-point' }, pos);
+      mk('circle', { class: 'hit-halo', cx: 0, cy: 0, r: 5 }, hp);
+      mk('circle', { class: 'hit-dot', cx: 0, cy: 0, r: 2.1 }, hp);
+      return pos;
+    }
 
-      // Einschlagpunkt-Puls & Punkt
-      addEl('circle', { cx: 0, cy: 0, r: 4, class: 'hit-marker-pulse' });
-      addEl('circle', { cx: 0, cy: 0, r: 2.3, class: 'hit-marker' });
-
-      // Schatten auf dem Board
-      addEl('line', {
-        x1: 0, y1: 0, x2: 26, y2: 14,
-        stroke: 'rgba(0,0,0,0.45)', 'stroke-width': 2.2, 'stroke-linecap': 'round'
-      });
-
-      // Stahlspitze (Steel Tip)
-      addEl('polygon', {
-        points: '0,0 7,-0.9 7,0.9',
-        fill: '#e2e8f0', stroke: '#334155', 'stroke-width': 0.3
-      });
-
-      // Barrel (Metallkörper mit Grip-Ringen)
-      addEl('rect', {
-        x: 7, y: -1.7, width: 13, height: 3.4, rx: 1.2,
-        fill: 'url(#dart-barrel-grad)', stroke: '#1e293b', 'stroke-width': 0.45
-      });
-      // Grip-Rillen am Barrel
-      [9.5, 11.5, 13.5, 15.5, 17.5].forEach(gx => {
-        addEl('line', { x1: gx, y1: -1.6, x2: gx, y2: 1.6, stroke: '#334155', 'stroke-width': 0.55 });
-      });
-
-      // Schaft (Shaft)
-      addEl('rect', {
-        x: 20, y: -1.0, width: 9, height: 2.0, rx: 0.6,
-        fill: '#1e293b', stroke: '#94a3b8', 'stroke-width': 0.35
-      });
-
-      // 3D-Flight (Unterer Flügel)
-      addEl('polygon', {
-        points: '26,0.5 31,6.8 40,5.2 38,0.5',
-        fill: '#0369a1', stroke: '#bae6fd', 'stroke-width': 0.45, 'stroke-linejoin': 'round'
-      });
-
-      // 3D-Flight (Oberer Flügel)
-      addEl('polygon', {
-        points: '26,-0.5 31,-6.8 40,-5.2 38,-0.5',
-        fill: 'url(#dart-flight-grad)', stroke: '#e0f2fe', 'stroke-width': 0.5, 'stroke-linejoin': 'round'
-      });
-
-      // Mittelrippe des Flights
-      addEl('line', {
-        x1: 26, y1: 0, x2: 39, y2: 0,
-        stroke: '#f0f9ff', 'stroke-width': 0.65, 'stroke-linecap': 'round'
-      });
-
-      return g;
+    const HIT_CLASSES = ['hit-sector', 'hit-sector-secondary', 'hit-ring'];
+    let hitTimer = null;
+    function highlightFields(svg, res) {
+      const add = (el) => el && el.classList.add(el.hasAttribute('data-ring') ? 'hit-ring' : 'hit-sector');
+      if (res.ring === 'BULL' || res.ring === 'SB') add(svg.querySelector(`[data-ring="${res.ring}"]`));
+      else if (res.segment) {
+        const q = z => svg.querySelector(`[data-sec="${res.segment}"][data-zone="${z}"]`);
+        if (res.ring === 'S') { add(q('inner-single')); add(q('outer-single')); }   // beide Single-Felder im gleichen Ton
+        else if (res.ring === 'D') add(q('double'));
+        else if (res.ring === 'T') add(q('triple'));
+      }
     }
 
     function markOnBoard(res, clear = false) {
       const NS = 'http://www.w3.org/2000/svg';
+      clearTimeout(hitTimer);
       boardSvgs.forEach(svg => {
         if (!svg) return;
-        svg.querySelectorAll('.hit-sector, .hit-sector-secondary, .hit-ring').forEach(el => {
-          el.classList.remove('hit-sector', 'hit-sector-secondary', 'hit-ring');
-        });
+        svg.querySelectorAll('.hit-sector, .hit-ring').forEach(el => el.classList.remove(...HIT_CLASSES));
         const g = $(svg.id + '-darts');
         if (clear) g.textContent = '';
         if (!res) return;
-
-        if (res.ring === 'BULL' || res.ring === 'SB') {
-          const ringEl = svg.querySelector(`[data-ring="${res.ring}"]`);
-          if (ringEl) ringEl.classList.add('hit-ring');
-        } else if (res.segment) {
-          if (res.ring === 'S') {
-            // Bei Single (z.B. S20): Beide Single-Felder dieses Segments blinken lassen!
-            // Das getroffene (Großes oder Kleines Single) blinkt kräftig, das andere begleitend
-            const innerEl = svg.querySelector(`[data-sec="${res.segment}"][data-zone="inner-single"]`);
-            const outerEl = svg.querySelector(`[data-sec="${res.segment}"][data-zone="outer-single"]`);
-            const hitIsInner = res.subZone === 'Kleines Single';
-            if (innerEl) innerEl.classList.add(hitIsInner ? 'hit-sector' : 'hit-sector-secondary');
-            if (outerEl) outerEl.classList.add(!hitIsInner ? 'hit-sector' : 'hit-sector-secondary');
-          } else if (res.ring === 'D') {
-            const dblEl = svg.querySelector(`[data-sec="${res.segment}"][data-zone="double"]`);
-            if (dblEl) dblEl.classList.add('hit-sector');
-          } else if (res.ring === 'T') {
-            const trpEl = svg.querySelector(`[data-sec="${res.segment}"][data-zone="triple"]`);
-            if (trpEl) trpEl.classList.add('hit-sector');
-          }
-        }
-
+        g.querySelectorAll('.dart-pos.latest').forEach(d => d.classList.remove('latest'));
         if (res.board && isFinite(res.board.x)) {
-          const bx = res.board.x + 10;
-          const by = res.board.y + 10;
-          const dartIndex = g.children.length;
-          const dartSvg = createDartArrowSvg(NS, bx, by, dartIndex);
-          g.appendChild(dartSvg);
+          let deg = null;
+          const bf = res.boardFlight;
+          if (bf && Math.hypot(bf.x - res.board.x, bf.y - res.board.y) > 0.5) deg = Math.atan2(bf.y - res.board.y, bf.x - res.board.x) * 180 / Math.PI;
+          const dEl = createDartArrowSvg(NS, res.board.x + 10, res.board.y + 10, g.children.length, deg);
+          if (res.dartId != null) dEl.dataset.dartId = res.dartId;
+          dEl.dataset.born = Date.now();
+          g.appendChild(dEl);
+          while (g.children.length > 3) g.removeChild(g.firstChild);   // nie mehr als 3 Darts sichtbar
         }
       });
+      if (res) {
+        // Feld leuchtet erst im Moment des Einschlags auf
+        hitTimer = setTimeout(() => boardSvgs.forEach(svg => svg && highlightFields(svg, res)), 480);
+      }
 
       const subInfo = res && res.subZone ? ` · ${res.subZone}` : '';
       $('board-last-hit').textContent = res ? `${res.label}${subInfo}${res.corrected ? ' (korrigiert)' : ''}` : 'Noch kein Treffer';
@@ -3400,7 +3388,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     bindEvent('turn-pause-skip', 'click', () => finishTurnPause('pause-skipped'));
-    const turnSlots = () => (activeSlots().filter(s => s.engine.H).length ? activeSlots().filter(s => s.engine.H) : activeSlots());
+    const turnSlots = () => { const act = activeSlots().filter(s => s.engine), cal = act.filter(s => s.engine.H); return (cal.length ? cal : act).map(s => s.engine); };
     function paintTurn(u) {
       const m = u.max; pips.innerHTML = '';
       for (let i = 0; i < m; i++) { const d = document.createElement('span'); d.className = 'dart-pip' + (i < u.count ? ' on' : ''); pips.append(d); }
@@ -3470,6 +3458,12 @@ document.addEventListener('DOMContentLoaded', async () => {
       });
       engine.on('screenshot-exit', () => { if (!engines.some(e => e.isScreenshotMode)) $('btn-live').hidden = true; });
       engine.on('photo-click', res => markOnBoard(res, true));
+      engine.on('board-empty', () => markOnBoard(null, true));
+      engine.on('dart-removed', gone => {
+        boardSvgs.forEach(svg => { if (svg) svg.querySelectorAll(`.dart-pos[data-dart-id="${gone.id}"]`).forEach(n => n.remove()); });
+        if (!turnSlots().some(e => e.turnDarts.length)) markOnBoard(null, true);
+        else boardSvgs.forEach(svg => svg && svg.querySelectorAll('.hit-sector, .hit-ring').forEach(el => el.classList.remove('hit-sector', 'hit-ring')));
+      });
       engine.on('turn-update', () => {
         const ts = turnSlots(), m = ts[0]?.turnLimit || 3;
         const count = Math.min(m, Math.max(0, ...ts.map(e => e.turnDarts.length)));
@@ -3477,7 +3471,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         paintTurn({ count, max: m, complete });
       });
       engine.on('turn-complete', () => {
-        if (!pauseTimer) startTurnPause();
+        /* keine feste Pause mehr: die Aufnahme endet, sobald die Kamera die Entnahme der Darts erkennt */
       });
       engine.on('turn-reset', () => {
         const anyComplete = turnSlots().some(e => e.turnComplete);
@@ -3495,10 +3489,70 @@ document.addEventListener('DOMContentLoaded', async () => {
       return engine;
     });
     const engines = active;
+
+    // Trefferbild immer synchron zum Kamerabild: nur Darts anzeigen, die eine Kamera noch als stecken verfolgt
+    function syncBoardWithCameras() {
+      const ts = turnSlots();
+      if (!ts.length) return;
+      const live = new Set(); ts.forEach(e => e.turnDarts.forEach(d => live.add(String(d.id))));
+      const now = Date.now();
+      let remaining = 0;
+      boardSvgs.forEach(svg => {
+        if (!svg) return;
+        const g = $(svg.id + '-darts'); if (!g) return;
+        g.querySelectorAll('.dart-pos').forEach(n => {
+          const young = now - Number(n.dataset.born || 0) < 1500;
+          if (!young && !(n.dataset.dartId != null && live.has(n.dataset.dartId))) n.remove();
+        });
+        remaining = Math.max(remaining, g.querySelectorAll('.dart-pos').length);
+        if (!g.querySelector('.dart-pos.latest') && g.lastElementChild) g.lastElementChild.classList.add('latest');
+      });
+      if (remaining === 0) boardSvgs.forEach(svg => svg && svg.querySelectorAll('.hit-sector, .hit-ring').forEach(el => el.classList.remove('hit-sector', 'hit-ring')));
+    }
+    setInterval(syncBoardWithCameras, 400);
     paintTurn({ count: 0, max: 3, complete: false });
 
     for (const e of engines) await e.start();
     const primary = engines[0];
+
+    /* Einfahrbare Sidebar: Desktop = andocken/einklappen, Tablet (<=1280px) = Drawer mit Wischgeste */
+    (function initSidebar() {
+      const shell = document.querySelector('.app-shell'), side = $('app-sidebar'), toggle = $('nav-toggle'), scrim = $('nav-scrim');
+      const mq = window.matchMedia('(max-width: 1280px)'), KEY = 'dartly_nav_collapsed';
+      let collapsed = false; try { collapsed = localStorage.getItem(KEY) === '1'; } catch (_) {}
+      const relayout = () => engines.forEach(e => e.layoutOverlays());
+      const isOpen = () => mq.matches ? shell.classList.contains('nav-open') : !collapsed;
+      function apply() {
+        shell.classList.toggle('nav-collapsed', !mq.matches && collapsed);
+        const open = isOpen();
+        toggle.setAttribute('aria-expanded', String(open));
+        side.inert = !open;
+        setTimeout(relayout, 320);
+      }
+      function set(open) {
+        if (mq.matches) shell.classList.toggle('nav-open', open);
+        else { collapsed = !open; try { localStorage.setItem(KEY, collapsed ? '1' : '0'); } catch (_) {} }
+        apply();
+      }
+      toggle.addEventListener('click', () => set(!isOpen()));
+      scrim.addEventListener('click', () => set(false));
+      document.addEventListener('keydown', e => { if (e.key === 'Escape' && mq.matches && isOpen()) set(false); });
+      document.querySelectorAll('.side-link, .side-sub-link').forEach(b => b.addEventListener('click', () => { if (mq.matches) set(false); }));
+      (mq.addEventListener ? mq.addEventListener('change', () => { shell.classList.remove('nav-open'); apply(); }) : mq.addListener(() => { shell.classList.remove('nav-open'); apply(); }));
+      // Wischgesten: vom linken Rand öffnen, auf der Sidebar nach links schließen
+      let sx = null, sy = 0, mode = '';
+      document.addEventListener('touchstart', e => {
+        const t = e.touches[0]; sx = t.clientX; sy = t.clientY;
+        mode = mq.matches && !isOpen() && sx < 24 ? 'open' : (mq.matches && isOpen() ? 'close' : '');
+      }, { passive: true });
+      document.addEventListener('touchend', e => {
+        if (sx === null || !mode) { sx = null; return; }
+        const t = e.changedTouches[0], dx = t.clientX - sx, dy = Math.abs(t.clientY - sy);
+        if (dy < 60 && ((mode === 'open' && dx > 60) || (mode === 'close' && dx < -60))) set(mode === 'open');
+        sx = null;
+      }, { passive: true });
+      apply();
+    })();
 
     function setPairingCode(slot, code) {
       localStorage.setItem(slot.storageKey, code);
