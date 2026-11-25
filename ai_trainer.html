@@ -102,17 +102,17 @@ details summary{cursor:pointer;font-size:.8rem;color:var(--gr);margin:4px 0}deta
 <section class="scr" id="s-train"><div class="card">
 <h2>🧠 Modell trainieren</h2>
 <p class="sm">Ein gemeinsames Ganzbild-Modell erkennt bis zu drei Darts gleichzeitig. Es erzeugt zwei Heatmaps: eine für die Spitzen und eine für die Flights. Die Spitzen-/Flight-Punkte werden anschließend paarweise zu Darts verbunden.</p>
-<details><summary><b>Wie das Modell arbeitet &amp; was der Fehler bedeutet</b></summary><p class="sm">Pro Trainingsbild vergleicht das Modell seine zwei Heatmaps mit den von dir geprüften Markierungen. Der <b>Loss</b> ist der gewichtete mittlere quadratische Heatmap-Fehler (MSE), kein Abstand in Pixeln oder Millimetern. Niedriger ist besser. Train-Loss misst bekannte Trainingsbilder; Validierungs-Loss misst zurückgehaltene Bilder und zeigt, ob das Modell auf neue Aufnahmen überträgt. Sinkender Train-Loss bei steigendem Validierungs-Loss ist ein Warnzeichen für Overfitting. Die eigentliche Treffergenauigkeit in Pixeln, Trefferquote und Fehlalarme werden separat im Reiter „Bewerten“ gemessen.</p><p class="sm">Ablauf: Du annotierst → lässt KI-Vorschläge anzeigen → korrigierst Spitze/Flight → klickst „Geprüft“ → nur diese bestätigten Markierungen fließen ins Training ein. KI-Vorschläge allein werden nicht automatisch als Wahrheit übernommen. So entsteht ein kontrollierter Feedback-Kreislauf.</p></details>
+<details><summary><b>Wie das Modell arbeitet &amp; was der Fehler bedeutet</b></summary><p class="sm">Pro Trainingsbild vergleicht das Modell seine zwei Heatmaps mit den von dir geprüften Markierungen. Der <b>Loss</b> ist ein Focal-Heatmap-Loss: echte Spitzen/Flights werden stärker gewichtet als leere Hintergrundpixel. Niedriger ist besser, aber allein kein Genauigkeitsmaß. Train-Loss misst bekannte Trainingsbilder; Validierungs-Loss misst zurückgehaltene Bilder und zeigt, ob das Modell auf neue Aufnahmen überträgt. Das Training speichert das beste Validierungsmodell und stoppt bei ausbleibender Verbesserung (Early Stopping). Die eigentliche Treffergenauigkeit in Pixeln, Trefferquote und Fehlalarme werden separat im Reiter „Bewerten“ gemessen.</p><p class="sm">Ablauf: Du annotierst → lässt KI-Vorschläge anzeigen → korrigierst Spitze/Flight → klickst „Geprüft“ → nur diese bestätigten Markierungen fließen ins Training ein. KI-Vorschläge allein werden nicht automatisch als Wahrheit übernommen. So entsteht ein kontrollierter Feedback-Kreislauf.</p></details>
 <p class="sm" id="desc"></p>
 <div class="row"><label>Eingabegröße</label><select id="size"></select></div>
-<div class="row"><label>Epochen</label><input type="number" id="ep" value="40" min="1" max="500"></div>
-<div class="row"><label>Batchgröße</label><input type="number" id="bs" value="8" min="1" max="64"></div>
-<div class="row"><label>Lernrate</label><input type="number" id="lr" value="0.002" step="0.0005" min="0.0001" max="0.05"></div>
-<div class="row"><label>Erkennungsschwelle</label><input type="number" id="thr" value="0.3" step="0.05" min="0.05" max="0.95"></div>
-<div class="row"><label><input type="checkbox" id="aug" checked> Augmentation (Drehen, Zoom, Spiegeln, Licht, Rauschen)</label></div>
-<div class="row"><label>Stärke</label><select id="augs" style="width:auto"><option value="2" selected>Stark (360°, ±25 % Versatz)</option><option value="1">Normal (±10°)</option></select></div>
+<div class="row"><label>Epochen</label><input type="number" id="ep" value="120" min="1" max="500"></div>
+<div class="row"><label>Batchgröße</label><input type="number" id="bs" value="4" min="1" max="64"></div>
+<div class="row"><label>Lernrate</label><input type="number" id="lr" value="0.0005" step="0.0001" min="0.0001" max="0.05"></div>
+<div class="row"><label>Erkennungsschwelle</label><input type="number" id="thr" value="0.38" step="0.05" min="0.05" max="0.95"></div>
+<div class="row"><label><input type="checkbox" id="aug" checked> Moderate Augmentation (Drehen, Zoom, Licht, Rauschen)</label></div>
+<div class="row"><label>Stärke</label><select id="augs" style="width:auto"><option value="2">Stark (360°, ±25 % Versatz)</option><option value="1" selected>Normal (±10°)</option></select></div>
 <div class="row"><label>Perspektive</label><select id="persp" style="width:auto"><option value="0.16" selected>Stark</option><option value="0.08">Mittel</option><option value="0">Aus</option></select></div>
-<div class="row"><label><input type="checkbox" id="cp" checked> Darts an zufällige Stellen kopieren (Datenaugmentation)</label></div>
+<div class="row"><label><input type="checkbox" id="cp"> Experimentell: Dart-Patches zufällig kopieren (standardmäßig aus)</label></div>
 <div class="row"><label><input type="checkbox" id="cont"> vorhandenes Modell weitertrainieren</label></div>
 <div class="row"><button class="btn ac" id="b-train" style="flex:1">🚀 Dieses Modell trainieren</button><button class="btn dg" id="b-stop" disabled>Stopp</button></div>
 <div class="sm" id="status">Bereit.</div>
@@ -844,7 +844,13 @@ const ANC=(()=>{const a=[[0,0,'Bullseye (Mitte)']],sc=d=>SECT[(((d/18)|0)+20)%20
 
 /* ---------- Heatmap-Dekodierung & Hilfen (auch im Einbau-Code) ---------- */
 function peaks(h,s,ch,thr,n){const r=[];for(let y=0;y<s;y++)for(let x=0;x<s;x++){const v=h[(y*s+x)*2+ch];if(v<thr)continue;let ok=1,sw=0,sx=0,sy=0;for(let j=-1;j<=1;j++)for(let i=-1;i<=1;i++){const X=x+i,Y=y+j;if(X<0||Y<0||X>=s||Y>=s)continue;const w=h[(Y*s+X)*2+ch];if(w>v)ok=0;sw+=w;sx+=w*(X+.5);sy+=w*(Y+.5)}if(ok)r.push({x:sx/sw/s,y:sy/sw/s,v})}r.sort((a,b)=>b.v-a.v);const o=[];for(const p of r)if(o.length<n&&o.every(q=>Math.hypot(q.x-p.x,q.y-p.y)>3/s))o.push(p);return o}
-function pair(T,F){const c=[];T.forEach((t,i)=>F.forEach((f,j)=>c.push([Math.hypot(t.x-f.x,t.y-f.y),i,j])));c.sort((a,b)=>a[0]-b[0]);const ui=new Set,uj=new Set,o=[];for(const[,i,j]of c){if(ui.has(i)||uj.has(j))continue;ui.add(i);uj.add(j);o.push({tip:{x:T[i].x,y:T[i].y},flight:{x:F[j].x,y:F[j].y}})}return o}
+function pair(T,F){
+ // Spitzen und Flights nicht blind nach kürzester Distanz verbinden:
+ // nur geometrisch plausible Dart-Längen zulassen und Konfidenz einbeziehen.
+ const c=[];T.forEach((t,i)=>F.forEach((f,j)=>{const d=Math.hypot(t.x-f.x,t.y-f.y);if(d>=.025&&d<=.30){const score=Math.abs(Math.log(d/.095))-.22*(t.v||0)-.16*(f.v||0);c.push([score,d,i,j])}}));
+ c.sort((a,b)=>a[0]-b[0]);const ui=new Set,uj=new Set,o=[];
+ for(const[,d,i,j]of c){if(o.length>=MAXD)break;if(ui.has(i)||uj.has(j))continue;ui.add(i);uj.add(j);o.push({tip:{x:T[i].x,y:T[i].y},flight:{x:F[j].x,y:F[j].y}})}return o
+}
 const hp=(h,x,y)=>{const k=h[6]*x+h[7]*y+1;return[(h[0]*x+h[1]*y+h[2])/k,(h[3]*x+h[4]*y+h[5])/k]};
 /* Zusatzkanäle: Board-Koordinaten (x,y) je Pixel + Kalibrier-Flag; Hc = Homographie Bild(0..1) → Board */
 function calMap(cal,p){if(!cal)return null;if(Array.isArray(cal))return hp(cal,p.x,p.y);const W=cal.width||1,H=cal.height||1,k=cal.k1||0,px={x:p.x*W,y:p.y*H},u=k?Homography.undistort(px,k,W/2,H/2,W):px;return hp(cal.H,u.x/W,u.y/H)}
@@ -907,7 +913,15 @@ function pack(S,hs){const B=S.length,xs=tf.tidy(()=>{let x=tf.stack(S.map(s=>s.x
  S.forEach(s=>s.x.dispose());const a=new Float32Array(B*hs*hs*2);S.forEach((s,i)=>a.set(s.h,i*hs*hs*2));return{xs,ys:tf.tensor4d(a,[B,hs,hs,2])}}
 
 /* ---------- Modell ---------- */
-const wLoss=(yt,yp)=>tf.mean(tf.mul(tf.square(tf.sub(yt,yp)),tf.add(1,tf.mul(yt,30))));
+// CenterNet-artiger Heatmap-Focal-Loss: wenige positive Peak-Pixel werden
+// nicht mehr von der großen Zahl leerer Hintergrundpixel überstimmt.
+const wLoss=(yt,raw)=>tf.tidy(()=>{
+ const p=tf.clipByValue(raw,1e-5,1-1e-5),pos=tf.cast(yt.greater(.1),'float32'),neg=tf.sub(1,pos);
+ const posLoss=tf.mul(pos,tf.mul(tf.square(tf.sub(1,p)),tf.neg(tf.log(p))));
+ const negLoss=tf.mul(neg,tf.mul(tf.pow(p,2),tf.mul(tf.pow(tf.sub(1,yt),4),tf.neg(tf.log(tf.sub(1,p))))));
+ const npos=tf.maximum(tf.sum(pos),1),nall=tf.scalar(yt.size);
+ return tf.add(tf.div(tf.sum(posLoss),npos),tf.mul(.25,tf.div(tf.sum(negLoss),nall)));
+});
 function build(size,pools,lr){const i=tf.input({shape:[size,size,6]});let x=i;
  const c=f=>{x=tf.layers.conv2d({filters:f,kernelSize:3,padding:'same',activation:'relu'}).apply(x)},p=()=>{x=tf.layers.maxPooling2d({poolSize:2}).apply(x)};
  c(16);p();c(32);if(pools>1)p();c(48);c(48);const f=x;
@@ -920,24 +934,36 @@ function chart(){const c=$('chart'),x=c.getContext('2d');x.clearRect(0,0,c.width
 
 async function trainModel(m,size){
  cleanDataset();
- const stride=2,hs=size/stride,lr=+$('lr').value||.002,E=+$('ep').value||40,B=+$('bs').value||8,aug=$('aug').checked;
+ const stride=2,hs=size/stride,lr=+$('lr').value||.0005,E=+$('ep').value||120,B=+$('bs').value||4,aug=$('aug').checked;
  const tr=units(m,'train'),va=units(m,'val'),skip=ds.filter(i=>i.auto&&done(i).length).length;
  pool=ds.filter(i=>i.split==='train'&&!i.auto&&i.rev).flatMap(it=>done(it).map(d=>({it,d})));
- if(tr.length<4)return log(`Zu wenig Trainingsdaten (${tr.length}). Empfohlen: mindestens ~20 Bilder bzw. Darts.`);
+ if(tr.length<4)return log(`Zu wenig Trainingsbilder (${tr.length}). Mit so wenigen Bildern ist keine belastbare Erkennung möglich; bitte mehr unabhängige Aufnahmen annotieren.`);
+ if(va.length<2)log('WARNUNG: Weniger als 2 bestätigte Validierungsbilder – Early Stopping und Gütebewertung sind unsicher.');
  training=true;stopF=false;hist={t:[],v:[]};updateUI();
  let net;
- if($('cont').checked&&nets[m]&&nets[m].size===size&&nets[m].net.inputs[0].shape[3]==6&&!nets[m].net.layers.some(l=>l.dilationRate&&l.dilationRate[0]>1)){net=nets[m].net;net.compile({optimizer:tf.train.adam(lr),loss:wLoss})}
+ if($('cont').checked&&nets[m]&&nets[m].size===size&&nets[m].net.inputs[0].shape[3]==6){net=nets[m].net;net.compile({optimizer:tf.train.adam(lr),loss:wLoss})}
  else{if(nets[m])nets[m].net.dispose();net=build(size,1,lr)}
  nets[m]={net,size,stride};
- log(`Training Unified Dart AI: ${tr.length} bestätigte TRAIN-Einheiten, ${va.length} bestätigte VALIDIERUNGS-Einheiten (nur zur Bewertung)${skip?`, ${skip} ungeprüfte Auto-Bilder ausgeschlossen`:''}, ${net.countParams()} Parameter, Backend ${tf.getBackend()}.`);
- try{for(let e=0;e<E&&!stopF;e++){
-  shuf(tr);let sum=0,n=0;
-  for(let i=0;i<tr.length;i+=B){const S=tr.slice(i,i+B).map(u=>sample(u,m,size,stride,aug)),{xs,ys}=pack(S,hs),l=await net.trainOnBatch(xs,ys);xs.dispose();ys.dispose();sum+=l*S.length;n+=S.length;await tf.nextFrame()}
-  let vl=null;if(va.length){let vs=0,vn=0;for(let i=0;i<va.length;i+=B){const S=va.slice(i,i+B).map(u=>sample(u,m,size,stride,false)),{xs,ys}=pack(S,hs),t=net.evaluate(xs,ys,{batchSize:B});vs+=(await t.data())[0]*S.length;vn+=S.length;t.dispose();xs.dispose();ys.dispose()}vl=vs/vn}
-  hist.t.push(sum/n);hist.v.push(vl);chart();const gap=vl==null?null:vl-(sum/n);$('m-train').textContent=(sum/n).toFixed(5);$('m-val').textContent=vl==null?'–':vl.toFixed(5);$('m-gap').textContent=gap==null?'–':(gap>=0?'+':'')+gap.toFixed(5);$('m-epoch').textContent=String(e+1);$('train-note').textContent=vl==null?'Keine bestätigten Validierungsbilder: nur Trainings-Loss verfügbar.':(gap>0.02?'Validierungs-Loss liegt über dem Trainings-Loss – auf Overfitting achten.':gap<-.02?'Validierung aktuell besser als Training; weiter beobachten.':'Train/Validierung liegen nah beieinander.');$('status').textContent=`Epoche ${e+1}/${E} · Train-Loss ${(sum/n).toFixed(5)}${vl!=null?' · Val-Loss '+vl.toFixed(5):''}`;
-  if((e+1)%5==0||e==0)log($('status').textContent)}
-  log(stopF?'Training gestoppt.':'Training abgeschlossen.')}
- catch(err){log('Trainingsfehler: '+err.message)}
+ const patience=Math.max(12,Math.min(30,Math.round(E*.18)));let stale=0,bestVal=Infinity,bestEpoch=0,bestWeights=null;
+ log(`Training Unified Dart AI · Focal Heatmap Loss · ${tr.length} bestätigte TRAIN-Bilder, ${va.length} VALIDIERUNGS-Bilder${skip?`, ${skip} Auto-Bilder ausgeschlossen`:''}, ${net.countParams()} Parameter.`);
+ try{
+  for(let e=0;e<E&&!stopF;e++){
+   shuf(tr);let sum=0,n=0;
+   for(let i=0;i<tr.length;i+=B){const S=tr.slice(i,i+B).map(u=>sample(u,m,size,stride,aug)),{xs,ys}=pack(S,hs);const l=await net.trainOnBatch(xs,ys);xs.dispose();ys.dispose();const lv=Array.isArray(l)?l[0]:l;sum+=lv*S.length;n+=S.length;await tf.nextFrame()}
+   let vl=null;
+   if(va.length){let vs=0,vn=0;for(let i=0;i<va.length;i+=B){const S=va.slice(i,i+B).map(u=>sample(u,m,size,stride,false)),{xs,ys}=pack(S,hs),t=net.evaluate(xs,ys,{batchSize:B});const vv=await t.data();vs+=vv[0]*S.length;vn+=S.length;t.dispose();xs.dispose();ys.dispose()}vl=vs/vn}
+   hist.t.push(sum/Math.max(1,n));hist.v.push(vl);chart();const gap=vl==null?null:vl-(sum/Math.max(1,n));
+   $('m-train').textContent=(sum/Math.max(1,n)).toFixed(5);$('m-val').textContent=vl==null?'–':vl.toFixed(5);$('m-gap').textContent=gap==null?'–':(gap>=0?'+':'')+gap.toFixed(5);$('m-epoch').textContent=String(e+1);
+   $('train-note').textContent=vl==null?'Keine bestätigten Validierungsbilder: nur Trainings-Loss verfügbar.':`Bester Validierungs-Loss: ${bestVal===Infinity?'wird ermittelt':bestVal.toFixed(5)} · Early Stopping nach ${patience} Epochen ohne Verbesserung.`;
+   $('status').textContent=`Epoche ${e+1}/${E} · Train ${ (sum/Math.max(1,n)).toFixed(5)}${vl!=null?' · Val '+vl.toFixed(5):''}`;
+   if(vl!=null&&vl<bestVal-0.00005){bestVal=vl;bestEpoch=e+1;stale=0;if(bestWeights)bestWeights.forEach(w=>w.dispose());bestWeights=net.getWeights().map(w=>w.clone())}
+   else if(vl!=null)stale++;
+   if((e+1)%5===0||e===0)log($('status').textContent+(vl!=null&&bestEpoch===e+1?' · neues Bestmodell':''));
+   if(va.length>=2&&stale>=patience){log(`Early Stopping: keine Validierungsverbesserung seit ${patience} Epochen.`);break;}
+  }
+  if(bestWeights){net.setWeights(bestWeights);bestWeights.forEach(w=>w.dispose());bestWeights=null;log(`Bestes Modell aus Epoche ${bestEpoch} wiederhergestellt (Val-Loss ${bestVal.toFixed(5)}).`)}
+  log(stopF?'Training gestoppt.':'Training abgeschlossen.');
+ }catch(err){if(bestWeights)bestWeights.forEach(w=>w.dispose());log('Trainingsfehler: '+err.message)}
  training=false;updateUI()}
 $('b-train').onclick=()=>trainModel(1,+$('size').value);
 $('b-stop').onclick=()=>{stopF=true};
