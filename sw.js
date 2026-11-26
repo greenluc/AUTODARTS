@@ -1,4 +1,4 @@
-const CACHE_NAME = 'dartly-v1';
+const CACHE_NAME = 'dartly-v2';
 const ASSETS = [
   'index.html',
   'camera_tablet.html',

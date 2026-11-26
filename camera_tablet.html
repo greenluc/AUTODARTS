@@ -3192,11 +3192,18 @@ class StreamReceiver {
     this.iceQueue = [];
     this.iceBuffer = [];
     this.iceTimer = null;
+    this.lastOffer = null;      // zuletzt beantwortete Offer (erkennt Neustart des Handys)
+    this.queue = Promise.resolve(); // Snapshots nacheinander abarbeiten
+    this.stopped = false;
   }
 
-  start() {
-    this.onStatus('Warte auf Handy-Verbindung...');
-    
+  createPc() {
+    if (this.iceTimer) { clearTimeout(this.iceTimer); this.iceTimer = null; }
+    if (this.pc) { try { this.pc.close(); } catch (e) {} }
+    this.processedCandidates = new Set();
+    this.iceQueue = [];
+    this.iceBuffer = [];
+
     const rtcConfig = {
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
@@ -3205,79 +3212,96 @@ class StreamReceiver {
         { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' }
       ]
     };
+    const pc = new this.deps.RTCPeerConnection(rtcConfig);
+    this.pc = pc;
 
-    if (this.pc) this.pc.close();
-    this.pc = new this.deps.RTCPeerConnection(rtcConfig);
-
-    this.pc.ontrack = event => {
+    pc.ontrack = event => {
+      if (pc !== this.pc) return;
       const remoteStream = event.streams[0] || new MediaStream([event.track]);
       this.onStream(remoteStream);
       this.onStatus('Stream empfangen');
     };
 
-    this.pc.oniceconnectionstatechange = () => {
-      this.onStatus(`Netzwerk: ${this.pc.iceConnectionState}`);
+    pc.oniceconnectionstatechange = () => {
+      if (pc !== this.pc) return;
+      this.onStatus(`Netzwerk: ${pc.iceConnectionState}`);
     };
 
-    this.pc.onicecandidate = event => {
-      if (event.candidate) {
-        this.iceBuffer.push(JSON.stringify(event.candidate));
-        if (!this.iceTimer) {
-          this.iceTimer = setTimeout(async () => {
-            const batch = [...this.iceBuffer];
-            this.iceBuffer = [];
-            this.iceTimer = null;
-            if (batch.length > 0) {
-              await this.deps.fs.setDoc(this.signalingRef, {
-                hubIceCandidates: this.deps.fs.arrayUnion(...batch)
-              }, { merge: true }).catch(() => {});
-            }
-          }, 500);
-        }
-      }
-    };
-
-    this.unsub = this.deps.fs.onSnapshot(this.signalingRef, async snapshot => {
-      const data = snapshot.data();
-      if (!data) return;
-
-      if (data.offer && this.pc && !this.pc.currentRemoteDescription) {
-        this.onStatus('Offer empfangen...');
-        const offerObj = JSON.parse(data.offer);
-        await this.pc.setRemoteDescription(new RTCSessionDescription(offerObj));
-
-        const answer = await this.pc.createAnswer();
-        await this.pc.setLocalDescription(answer);
-
-        await this.deps.fs.setDoc(this.signalingRef, {
-          answer: JSON.stringify({ type: answer.type, sdp: answer.sdp }),
-          updatedAt: new Date().toISOString()
-        }, { merge: true }).catch(() => {});
-
-        while (this.iceQueue.length > 0) {
-          await this.pc.addIceCandidate(this.iceQueue.shift()).catch(() => {});
-        }
-      }
-
-      if (data.cameraIceCandidates && Array.isArray(data.cameraIceCandidates)) {
-        for (const candidateStr of data.cameraIceCandidates) {
-          if (!this.processedCandidates.has(candidateStr)) {
-            this.processedCandidates.add(candidateStr);
-            try {
-              const candidate = new RTCIceCandidate(JSON.parse(candidateStr));
-              if (this.pc.remoteDescription && this.pc.remoteDescription.type) {
-                await this.pc.addIceCandidate(candidate);
-              } else {
-                this.iceQueue.push(candidate);
-              }
-            } catch (e) {}
+    pc.onicecandidate = event => {
+      if (pc !== this.pc || !event.candidate) return;
+      this.iceBuffer.push(JSON.stringify(event.candidate));
+      if (!this.iceTimer) {
+        this.iceTimer = setTimeout(async () => {
+          const batch = [...this.iceBuffer];
+          this.iceBuffer = [];
+          this.iceTimer = null;
+          if (batch.length > 0 && pc === this.pc) {
+            await this.deps.fs.setDoc(this.signalingRef, {
+              hubIceCandidates: this.deps.fs.arrayUnion(...batch)
+            }, { merge: true }).catch(err => console.warn('ICE-Upload fehlgeschlagen:', err));
           }
-        }
+        }, 500);
       }
-    }, () => this.onStatus('Fehler'));
+    };
+  }
+
+  start() {
+    this.onStatus('Warte auf Handy-Verbindung...');
+    this.createPc();
+
+    this.unsub = this.deps.fs.onSnapshot(this.signalingRef, snapshot => {
+      const data = snapshot.data();
+      this.queue = this.queue
+        .then(() => this.handleSignal(data))
+        .catch(e => { console.error('Signaling-Fehler:', e); this.onStatus('Fehler: ' + (e.message || e)); });
+    }, err => {
+      console.error('Firestore-Listener-Fehler:', err);
+      this.onStatus('Firestore: ' + (err.code || 'Fehler'));
+    });
+  }
+
+  async handleSignal(data) {
+    if (this.stopped || !data) return;
+
+    // Neue Offer (z. B. Handy neu gestartet) -> frische PeerConnection aufbauen
+    if (data.offer && data.offer !== this.lastOffer) {
+      if (this.lastOffer !== null) this.createPc();
+      this.lastOffer = data.offer;
+      this.onStatus('Offer empfangen...');
+
+      await this.pc.setRemoteDescription(new RTCSessionDescription(JSON.parse(data.offer)));
+      const answer = await this.pc.createAnswer();
+      await this.pc.setLocalDescription(answer);
+
+      await this.deps.fs.setDoc(this.signalingRef, {
+        answer: JSON.stringify({ type: answer.type, sdp: answer.sdp }),
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+      this.onStatus('Answer gesendet...');
+
+      while (this.iceQueue.length > 0) {
+        await this.pc.addIceCandidate(this.iceQueue.shift()).catch(() => {});
+      }
+    }
+
+    if (Array.isArray(data.cameraIceCandidates)) {
+      for (const candidateStr of data.cameraIceCandidates) {
+        if (this.processedCandidates.has(candidateStr)) continue;
+        this.processedCandidates.add(candidateStr);
+        try {
+          const candidate = new RTCIceCandidate(JSON.parse(candidateStr));
+          if (this.pc.remoteDescription && this.pc.remoteDescription.type) {
+            await this.pc.addIceCandidate(candidate);
+          } else {
+            this.iceQueue.push(candidate);
+          }
+        } catch (e) { console.warn('ICE-Kandidat Fehler:', e); }
+      }
+    }
   }
 
   stop() {
+    this.stopped = true;
     if (this.iceTimer) { clearTimeout(this.iceTimer); this.iceTimer = null; }
     if (this.unsub) this.unsub();
     if (this.pc) this.pc.close();
