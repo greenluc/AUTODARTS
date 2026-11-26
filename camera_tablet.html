@@ -1070,7 +1070,9 @@
 
 <script>
 const LS_KEY = 'dartly_camera_homography_19pt_fit_v2';
-const BOARD = { size: 200, cx: 100, cy: 100, rOuter: 91 };
+// Normiertes, quadratisches Board-Modell: 340 mm realer Außendurchmesser = 182 Modell-Pixel.
+// Das Modell bleibt exakt 1:1; die 9-Pixel-Randzone ist nur Zeichenfläche.
+const BOARD = { size: 200, cx: 100, cy: 100, rOuter: 91, aspectRatio: 1, outerDiameterMm: 340 };
 const SECTOR_ORDER = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5];
 const BOARD_MM = { bullseye: 6.35, singleBull: 15.9, tripleInner: 99, tripleOuter: 107, doubleInner: 162, doubleOuter: 170 };
 const REAL_BOARD_RADII = Object.fromEntries(Object.entries(BOARD_MM).map(([k, v]) => [k, +(v * BOARD.rOuter / BOARD_MM.doubleOuter).toFixed(2)]));
@@ -1267,6 +1269,52 @@ class Homography {
     for (let k = -0.3; k <= 0.3001; k += 0.02) { const v = rms(k); if (v < bv) { bv = v; best = k; } }
     for (let d = -0.01; d <= 0.0101; d += 0.0025) { const k = best + d, v = rms(k); if (v < bv) { bv = v; best = k; } }
     return bv <= base * 0.75 && base > 0.3 && Math.abs(best) > 0.01 ? best : 0;
+  }
+
+  // Robuste, gewichtete Anpassung: alle 19 Anker bleiben erhalten.
+  // Huber-Gewichte reduzieren nur den Einfluss offensichtlich falsch gesetzter Punkte.
+  static solveWeightedLeastSquares(src, dst, weights) {
+    const n = src.length;
+    if (n < 4 || dst.length < n) return null;
+    const ns = Homography.normalize(src), nd = Homography.normalize(dst.slice(0, n));
+    const ATA = Array.from({ length: 9 }, () => new Array(9).fill(0));
+    for (let i = 0; i < n; i++) {
+      const wt = Math.max(1e-4, Number(weights?.[i] ?? 1));
+      const { x, y } = ns.pts[i], { x: X, y: Y } = nd.pts[i];
+      for (const r of [[-x, -y, -1, 0, 0, 0, x * X, y * X, X], [0, 0, 0, -x, -y, -1, x * Y, y * Y, Y]]) {
+        for (let a = 0; a < 9; a++) for (let b = 0; b < 9; b++) ATA[a][b] += wt * r[a] * r[b];
+      }
+    }
+    const { values, V } = Homography.jacobiEigen(ATA);
+    let k = 0; for (let i = 1; i < 9; i++) if (values[i] < values[k]) k = i;
+    const h = V.map(row => row[k]);
+    const Hn = [[h[0], h[1], h[2]], [h[3], h[4], h[5]], [h[6], h[7], h[8]]];
+    const Tinv = Homography.invert(nd.T); if (!Tinv) return null;
+    const H = Homography.mul3(Homography.mul3(Tinv, Hn), ns.T);
+    if (!isFinite(H[2][2]) || Math.abs(H[2][2]) < 1e-12) return null;
+    const out = H.map(r => r.map(v => v / H[2][2]));
+    return out.every(r => r.every(Number.isFinite)) ? out : null;
+  }
+
+  static fitRobust(src, dst, { iterations = 6, huber = 1.5 } = {}) {
+    const n = Math.min(src.length, dst.length);
+    if (n < 4) return null;
+    const a = src.slice(0, n), b = dst.slice(0, n);
+    let weights = new Array(n).fill(1), H = Homography.solveWeightedLeastSquares(a, b, weights);
+    if (!H) return null;
+    const median = v => { const q = v.slice().sort((x, y) => x - y), m = q.length >> 1; return q.length % 2 ? q[m] : (q[m - 1] + q[m]) / 2; };
+    for (let it = 0; it < iterations; it++) {
+      const errors = a.map((p, i) => { const q = Homography.apply(H, p.x, p.y); return Math.hypot(q.x - b[i].x, q.y - b[i].y); });
+      const med = median(errors), mad = median(errors.map(e => Math.abs(e - med))), sigma = Math.max(0.20, 1.4826 * mad);
+      weights = errors.map(e => { const d = Math.abs(e - med); return d <= huber * sigma ? 1 : (huber * sigma) / Math.max(d, 1e-9); });
+      const next = Homography.solveWeightedLeastSquares(a, b, weights);
+      if (!next) break;
+      H = next;
+    }
+    const errors = a.map((p, i) => { const q = Homography.apply(H, p.x, p.y); return Math.hypot(q.x - b[i].x, q.y - b[i].y); });
+    const rms = Math.sqrt(errors.reduce((sum, e, i) => sum + weights[i] * e * e, 0) / weights.reduce((sum, w) => sum + w, 0));
+    let worst = 0; errors.forEach((e, i) => { if (e > errors[worst]) worst = i; });
+    return { H, rms, errors, weights, used: [...Array(n).keys()], dropped: [], worst };
   }
 
   static fit(src, dst, { maxRms = 3, minPts = 7, maxDrop = 3 } = {}) {
@@ -1658,15 +1706,16 @@ class AutoBoardDetector {
     }
     if (ws <= 0) return null;
     const det = a * c - b * b, tr = a + c;
-    if (det < 0.025 * tr * tr) return null;
+    if (det < 0.012 * tr * tr) return null;
     return { x: (c * rx - b * ry) / det, y: (a * ry - b * rx) / det, strength: det / (tr * tr) };
   }
 
   static fitCrossings(gray, gw, gh, Hb, opts = {}) {
     const c0 = Homography.apply(Hb, BOARD.cx, BOARD.cy), c1 = Homography.apply(Hb, BOARD.cx + 10, BOARD.cy);
     const pxPerMm = Math.hypot(c1.x - c0.x, c1.y - c0.y) / 10 * (BOARD.rOuter / 170);
-    const rad = Math.min(7, Math.max(2.5, 3.0 * pxPerMm)), maxShift = Math.max(2.5, 2.6 * pxPerMm);
-    const minNeeded = gw < 900 ? 16 : 24;
+    const rad = Math.min(9, Math.max(3, 3.5 * pxPerMm)), maxShift = Math.max(3.5, 3.5 * pxPerMm);
+    // Tolerant minimum: partial/occluded wire intersections must not cancel auto calibration.
+    const minNeeded = gw < 900 ? 12 : 16;
     const cr = AutoBoardDetector.crossings(), src = [], dst = [];
     for (const c of cr) {
       const p = Homography.apply(Hb, c.bx, c.by);
@@ -1681,7 +1730,7 @@ class AutoBoardDetector {
       H = Homography.solveLeastSquares(idx.map(i => src[i]), idx.map(i => dst[i])); if (!H) return null;
       const e = src.map((p, i) => { const q = Homography.apply(H, p.x, p.y); return Math.hypot(q.x - dst[i].x, q.y - dst[i].y); });
       const ev = idx.map(i => e[i]).sort((a, b) => a - b), med = ev[ev.length >> 1], mad = ev.map(v => Math.abs(v - med)).sort((a, b) => a - b)[ev.length >> 1] * 1.4826 + 0.02;
-      const keep = src.map((_, i) => i).filter(i => e[i] <= med + 2.5 * mad + 0.05);
+      const keep = src.map((_, i) => i).filter(i => e[i] <= med + 3.0 * mad + 0.10);
       if (keep.length === idx.length || keep.length < minNeeded) { idx = keep.length < minNeeded ? idx : keep; break; }
       idx = keep;
     }
@@ -1742,7 +1791,7 @@ class AutoBoardDetector {
     if (!best || best.fp < 0.24) return null;
     const uncertain = best.fp < level.minFp;
     const toSrc = (H, gw, gh) => CALIB_TARGETS.map(t => { const p = Homography.apply(H, t.x, t.y); return { x: p.x * srcW / gw, y: p.y * srcH / gh }; });
-    let points = toSrc(best.Hbi, best.w, best.h), refined = false, crossings = 0;
+    let points = toSrc(best.Hbi, best.w, best.h), refined = false, crossings = 0, crossingsFound = 0, crossingRms = null, autoMatrix = null;
     if (level.sub) {
       progress('Verfeinere auf Subpixel …'); await pause();
       const { gray, gw, gh } = AutoBoardDetector.makeGray(media, srcW, srcH, Math.min(srcW, level.sub.maxW));
@@ -1752,23 +1801,32 @@ class AutoBoardDetector {
       if (sp && sp.n >= sp.minOk && shift < 0.08 * gw) {
         refined = true;
         const Hb = homog4(AUTO_TARGETS4, [0, 1, 2, 3].map(i => ({ x: sp.P[2 * i], y: sp.P[2 * i + 1] })));
-        let ptsA = toSrc(Hb, gw, gh);
-        if (level.cross) {
-          progress('Prüfe alle Drahtkreuzungen …'); await pause();
-          const fc = AutoBoardDetector.fitCrossings(gray, gw, gh, Hb), Hb2 = fc && Homography.invert(fc.Hcb);
-          if (Hb2) {
-            const ptsB = toSrc(Hb2, gw, gh);
-            const pxmm0 = pxPerMmFromAnchors(ptsA);
-            const dev = ptsA.reduce((s, p, i) => s + Math.hypot(p.x - ptsB[i].x, p.y - ptsB[i].y), 0) / ptsA.length / pxmm0;
-            if (dev < (isLowRes ? 2.2 : 1.5)) { ptsA = ptsA.map((p, i) => ({ x: (p.x + ptsB[i].x) / 2, y: (p.y + ptsB[i].y) / 2 })); crossings = fc.n; }
+        if (Hb && level.cross) {
+          progress('Vermesse alle 80 möglichen Drahtkreuzungen …'); await pause();
+          const fc = AutoBoardDetector.fitCrossings(gray, gw, gh, Hb);
+          if (fc) {
+            crossings = fc.n; crossingsFound = fc.found; crossingRms = fc.rms;
+            const HbiCross = Homography.invert(fc.Hcb);
+            if (HbiCross) {
+              const ptsA = toSrc(Hb, gw, gh), ptsB = toSrc(HbiCross, gw, gh);
+              const pxmm0 = Math.max(1e-6, pxPerMmFromAnchors(ptsA));
+              const dev = ptsA.reduce((sum, q, i) => sum + Math.hypot(q.x - ptsB[i].x, q.y - ptsB[i].y), 0) / ptsA.length / pxmm0;
+              // Tolerante Plausibilitätsprüfung: einzelne fehlende/ungenau erkannte
+              // Drahtkreuzungen dürfen die automatische Kalibrierung nicht unnötig verhindern.
+              if (fc.n >= 14 && fc.rms <= 3.0 && dev <= (isLowRes ? 4.5 : 3.5)) {
+                const sx = gw / srcW, sy = gh / srcH;
+                autoMatrix = fc.Hcb.map(row => [row[0] * sx, row[1] * sy, row[2]]);
+                points = ptsB;
+              }
+            }
           }
         }
-        points = ptsA;
+        if (!autoMatrix) points = toSrc(Hb, gw, gh);
       }
     }
     const pxPerMm = pxPerMmFromAnchors(points);
     const confidence = Math.min(1, 0.55 * best.fp + 0.45 * Math.min(1, best.lad / 0.72));
-    return { points, fp: best.fp, confidence, width: best.width, ms: Math.round(performance.now() - t0), refined, crossings, pxPerMm, uncertain };
+    return { points, autoMatrix, fp: best.fp, confidence, width: best.width, ms: Math.round(performance.now() - t0), refined, crossings, crossingsFound, crossingRms, pxPerMm, uncertain };
   }
 }
 
@@ -2068,8 +2126,16 @@ class MotionDetector {
     const h = Math.round(w * srcH / srcW);
     if (this.cvs.width !== w || this.cvs.height !== h) { this.cvs.width = w; this.cvs.height = h; this.roi = null; }
     this.ctx.drawImage(mediaEl, 0, 0, w, h);
-    const d = this.ctx.getImageData(0, 0, w, h).data, g = new Uint8Array(w * h);
-    for (let i = 0, j = 0; i < g.length; i++, j += 4) g[i] = (d[j] * 77 + d[j + 1] * 150 + d[j + 2] * 29) >> 8;
+    const d = this.ctx.getImageData(0, 0, w, h).data, raw = new Uint8Array(w * h);
+    for (let i = 0, j = 0; i < raw.length; i++, j += 4) raw[i] = (d[j] * 77 + d[j + 1] * 150 + d[j + 2] * 29) >> 8;
+    // 3x3-Medianfilter: entfernt einzelne Sensor-/Kompressionsstörungen,
+    // erhält aber schmale Dartkanten deutlich besser als ein stärkerer Gauß-Weichzeichner.
+    const tmp = new Uint8Array(raw.length), g = new Uint8Array(raw.length);
+    const med3 = (a, b, c) => Math.max(Math.min(a, b), Math.min(Math.max(a, b), c));
+    for (let y = 0; y < h; y++) for (let x = 1; x < w - 1; x++) { const i = y * w + x; tmp[i] = med3(raw[i - 1], raw[i], raw[i + 1]); }
+    for (let y = 1; y < h - 1; y++) for (let x = 0; x < w; x++) { const i = y * w + x; g[i] = med3(tmp[i - w], tmp[i], tmp[i + w]); }
+    for (let x = 0; x < w; x++) { g[x] = raw[x]; g[(h - 1) * w + x] = raw[(h - 1) * w + x]; }
+    for (let y = 0; y < h; y++) { g[y * w] = raw[y * w]; g[y * w + w - 1] = raw[y * w + w - 1]; }
     return g;
   }
 
@@ -2491,6 +2557,7 @@ class AutoDartsEngine {
     this.listeners = {};
     this.H = null; this.Hinv = null; this.camSize = null; this.k1 = 0;
     this.state = 'idle'; this.still = 0; this.prev = null; this.reference = null; this.timer = null;
+    this._driftLastCheck = 0; this._driftRunning = false; this._driftVotes = 0;
     this.isVideoFileMode = false; this.isScreenshotMode = false; this.activeMedia = null; this.lsKey = LS_KEY;
     this.overlayResizeObserver = null;
     this.turnDarts = []; this.turnComplete = false; this.emptyRef = null; this.emptyRefFull = null; this.refFull = null; this.dartSeq = 0; this.shotPoint = null;
@@ -2666,15 +2733,24 @@ class AutoDartsEngine {
     }
 
     const k1 = Homography.estimateK1(pts, CALIB_TARGETS, this.camSize.w, this.camSize.h);
-    const fit = Homography.fit(k1 ? pts.map(q => Homography.undistort(q, k1, this.camSize.w / 2, this.camSize.h / 2, this.camSize.w)) : pts, CALIB_TARGETS);
-    if (!fit || fit.rms > 3) {
-      this.setStatus(fit ? `Kalibrierung ungenau` : 'Kalibrierung ungültig');
+    const correctedPts = k1 ? pts.map(q => Homography.undistort(q, k1, this.camSize.w / 2, this.camSize.h / 2, this.camSize.w)) : pts;
+    const fit = Homography.fitRobust(correctedPts, CALIB_TARGETS, { iterations: 7, huber: 1.5 });
+    // Fehlerwerte liegen im normierten Board-Modell (170 mm entsprechen 91 Modell-Pixeln).
+    // 2.0 Modell-Pixel entsprechen rund 3.74 mm radialem Fehler.
+    if (!fit || fit.rms > 2.0 || fit.errors.filter(e => e > 7).length > 2) {
+      this.setStatus(fit ? `Kalibrierung ungenau (Ø ${(fit.rms * 170 / 91).toFixed(2)} mm) – Punkte prüfen` : 'Kalibrierung ungültig');
       return false;
     }
     const H = fit.H;
     this.k1 = k1;
     this.applyHomography(H);
-    localStorage.setItem(this.lsKey, JSON.stringify({ k1, matrix: H, width: this.camSize.w, height: this.camSize.h, method: `${ANCHOR_COUNT}-pt`, savedAt: Date.now() }));
+    localStorage.setItem(this.lsKey, JSON.stringify({
+      k1, matrix: H, width: this.camSize.w, height: this.camSize.h,
+      method: `${ANCHOR_COUNT}-pt-robust`,
+      geometry: { boardDiameterMm: 340, outerRadiusMm: 170, modelSize: BOARD.size, modelOuterRadius: BOARD.rOuter, aspectRatio: 1 },
+      quality: { rmsModelPx: fit.rms, rmsMm: fit.rms * 170 / 91, maxErrorModelPx: Math.max(...fit.errors), pointCount: pts.length },
+      savedAt: Date.now()
+    }));
     
     const distCm = DartLocator.estimateCameraDistance(H, this.camSize.w, this.camSize.h);
     const distText = distCm ? ` · ${distCm} cm Abstand` : '';
@@ -2697,13 +2773,41 @@ class AutoDartsEngine {
     this.setStatus('Auto-Erkennung läuft …');
     let r = null;
     try { r = await Promise.race([AutoBoardDetector.detect(media, this.cfg, m => this.setStatus(m)), new Promise((_, rej) => setTimeout(() => rej(new Error('Zeitüberschreitung')), 30000))]); }
-    catch (e) { r = null; this.setStatus('Auto-Erkennung nicht möglich – Schätzung wird verwendet'); }
-    if (!r || !r.points || r.points.length !== ANCHOR_COUNT) {
-      const W = media.videoWidth || media.naturalWidth, H = media.videoHeight || media.naturalHeight, k = 0.42 * Math.min(W, H) / BOARD.rOuter;
-      const points = CALIB_TARGETS.map(t => ({ x: W / 2 + (t.x - BOARD.cx) * k, y: H / 2 + (t.y - BOARD.cy) * k }));
-      return this.calibrate(points, 'Schätzung – bitte Punkte prüfen und ziehen');
+    catch (e) { r = null; this.setStatus('Auto-Erkennung nicht möglich – bitte manuell kalibrieren'); }
+
+    // Automatik: direkte Homographie aus den tatsächlich erkannten Drahtkreuzungen.
+    // Die Mindestzahl und Qualitätsgrenzen sind bewusst fehlertolerant gewählt.
+    if (r && r.autoMatrix && r.crossings >= 14 && r.crossingRms <= 3.0) {
+      try {
+        const H = r.autoMatrix;
+        this.applyHomography(H);
+        this.k1 = 0;
+        const W = media.videoWidth || media.naturalWidth, HH = media.videoHeight || media.naturalHeight;
+        localStorage.setItem(this.lsKey, JSON.stringify({
+          k1: 0, matrix: H, width: W, height: HH,
+          method: 'auto-all-wire-crossings',
+          geometry: { boardDiameterMm: 340, outerRadiusMm: 170, modelSize: BOARD.size, modelOuterRadius: BOARD.rOuter, aspectRatio: 1 },
+          quality: { crossingCount: r.crossings, crossingCandidates: r.crossingsFound, crossingRmsModelPx: r.crossingRms, pxPerMm: r.pxPerMm, confidence: r.confidence, detectorScore: r.fp },
+          savedAt: Date.now()
+        }));
+        const distCm = DartLocator.estimateCameraDistance(H, W, HH);
+        this.setStatus(`Automatisch kalibriert · ${r.crossings}/${r.crossingsFound} Kreuzungen · Fehler ${r.crossingRms.toFixed(2)} Modell-px · ${Math.round(r.confidence * 100)} %`);
+        this.emit('calibrated', { matrix: H, method: 'auto-all-wire-crossings', distanceCm: distCm, crossingCount: r.crossings, crossingCandidates: r.crossingsFound, rms: r.crossingRms });
+        this.showGrid(true);
+        if (!this.isScreenshotMode && (this.running || !this.timer)) this.beginDetection();
+        return true;
+      } catch (e) {
+        console.warn('Automatische Kreuzungskalibrierung fehlgeschlagen:', e);
+      }
     }
-    return this.calibrate(r.points, `Auto ${Math.round(r.confidence * 100)} % sicher`);
+
+    if (!r || !r.points || r.points.length !== ANCHOR_COUNT) {
+      this.setStatus('Automatische Erkennung war nicht eindeutig – bitte Bild/Board prüfen oder die 19-Punkt-Kalibrierung verwenden');
+      return false;
+    }
+    // Fallback zeigt die erkannte 19-Punkt-Schätzung nur zur manuellen Kontrolle;
+    // sie wird nicht als automatische Vollkalibrierung ausgegeben.
+    return this.calibrate(r.points, `Auto-Vorschau ${Math.round(r.confidence * 100)} % · bitte prüfen`);
   }
 
   clearCalibration() { localStorage.removeItem(this.lsKey); this.k1 = 0; this.H = this.Hinv = null; this.stopDetection(); this.resetTurnState(); }
@@ -2801,6 +2905,7 @@ class AutoDartsEngine {
     const mediaSource = this.video;
     if (!mediaSource || mediaSource.readyState < 2 || (!this.motion.roi && !this.prepareRoi())) return;
     const g = this.motion.grab(mediaSource), m = this.cfg.motion;
+    this.maybeCheckCalibrationDrift();
     const frameDiff = this.prev ? this.motion.diff(g, this.prev, { includeMask: false }) : null;
     const ratio = frameDiff?.ratio || 0;
     const refRatio = this.reference ? this.motion.diff(g, this.reference, { includeMask: false }).ratio : 0;
@@ -2827,6 +2932,34 @@ class AutoDartsEngine {
   }
 
   prepareRoi() { if (!this.H || !this.camSize) return false; this.motion.buildRoi(this.H, this.camSize.w, this.camSize.h); return true; }
+
+  maybeCheckCalibrationDrift() {
+    const now = Date.now();
+    if (this._driftRunning || now - this._driftLastCheck < 8000 || !this.H || !this.Hinv || Math.abs(this.k1 || 0) > 0.03 || this.state !== 'armed' || this.turnDarts.length || this.isScreenshotMode) return;
+    this._driftLastCheck = now; this._driftRunning = true;
+    Promise.resolve().then(() => {
+      const media = this.video, sw = media?.videoWidth || 0, sh = media?.videoHeight || 0;
+      if (!sw || !sh) return;
+      const { gray, gw, gh } = AutoBoardDetector.makeGray(media, sw, sh, Math.min(sw, 1280));
+      const sx = gw / sw, sy = gh / sh;
+      // Board->Bild-Projektion auf die verkleinerte Prüfansicht skalieren.
+      const Hb = this.Hinv.map((r, i) => i === 0 ? r.map(v => v * sx) : (i === 1 ? r.map(v => v * sy) : r.slice()));
+      const check = AutoBoardDetector.fitCrossings(gray, gw, gh, Hb);
+      if (!check || check.n < 30 || !isFinite(check.rms) || check.rms > 2.5) { this._driftVotes = Math.max(0, this._driftVotes - 1); return; }
+      const Hnew = Homography.rescaleSource(check.Hcb, sx, sy);
+      const samples = CALIB_TARGETS.filter((_, i) => i % 2 === 0);
+      const deviations = samples.map(t => {
+        const raw = Homography.apply(this.Hinv, t.x, t.y), q = Homography.apply(Hnew, raw.x, raw.y);
+        return Math.hypot(q.x - t.x, q.y - t.y);
+      });
+      const mean = deviations.reduce((a, b) => a + b, 0) / Math.max(1, deviations.length);
+      if (mean > 1.6 && mean < 12) this._driftVotes++; else this._driftVotes = Math.max(0, this._driftVotes - 1);
+      if (this._driftVotes >= 2) {
+        this.stopDetection(); this.setStatus('Kameraposition oder Board hat sich verschoben – bitte neu kalibrieren');
+        this.emit('calibration-drift', { meanModelPx: mean, crossings: check.n, rms: check.rms });
+      }
+    }).catch(e => console.warn('Kalibrierungs-Driftprüfung übersprungen', e)).finally(() => { this._driftRunning = false; });
+  }
 
   blobBox(blob, cur) {
     const mo = this.motion, sx = cur.w / mo.w, sy = cur.h / mo.h; let x0 = 1e9, y0 = 1e9, x1 = -1, y1 = -1, cx = 0, cy = 0;
@@ -2992,6 +3125,19 @@ class AutoDartsEngine {
 
     const tipU = this.undist(loc.tip), b = Homography.apply(this.H, tipU.x, tipU.y);
     const res = Scoring.fromBoard(b.x, b.y, this.cfg.radii);
+    // Lokale Unsicherheit wird in 9 gewichteten Nachbarproben auf die Trefferzone übertragen.
+    // Das ändert nicht stillschweigend den Treffer, sondern markiert Grenzfälle als unsicher.
+    const sigmaSrc = Math.max(0.35, Math.min(3, (loc.spread || 0) * 0.5 + (1 - (loc.conf || 0.3)) * 1.2));
+    const axis = [-1, 0, 1], weights = [1, 2, 1], votes = new Map(); let voteTotal = 0;
+    for (let iy = 0; iy < 3; iy++) for (let ix = 0; ix < 3; ix++) {
+      const wt = weights[ix] * weights[iy], pu = this.undist({ x: loc.tip.x + axis[ix] * sigmaSrc, y: loc.tip.y + axis[iy] * sigmaSrc });
+      const pb = Homography.apply(this.H, pu.x, pu.y), candidate = Scoring.fromBoard(pb.x, pb.y, this.cfg.radii);
+      votes.set(candidate.label, (votes.get(candidate.label) || 0) + wt); voteTotal += wt;
+    }
+    const scoreProbability = (votes.get(res.label) || 0) / Math.max(1, voteTotal);
+    res.scoreProbability = scoreProbability;
+    res.scoreAlternatives = [...votes.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([label, wt]) => ({ label, probability: wt / voteTotal }));
+    if (scoreProbability < 0.68) { loc.unsure = true; loc.conf *= scoreProbability; }
 
     this.reference = g.slice(); this.refFull = cur; this.state = 'armed';
     if (!isFinite(res.board.r) || res.board.r > m.maxScoreRadius) { this.setStatus('Bereit'); this.emit('detect-failed', { tip: loc.tip }); return; }
@@ -3434,8 +3580,15 @@ document.addEventListener('DOMContentLoaded', async () => {
             const other = fuse.recent.find(x => x.cam !== slot.name && Math.hypot(x.res.board.x - res.board.x, x.res.board.y - res.board.y) < 16);
             if (other) {
               other.row?.remove(); total -= other.res.points; turnSum -= other.res.points;
-              const merged = Scoring.fromBoard((other.res.board.x + res.board.x) / 2, (other.res.board.y + res.board.y) / 2, engine.cfg.radii);
-              Object.assign(merged, { fused: true, cam: res.cam, confidence: Math.max(other.res.confidence || 0, res.confidence || 0) });
+              const c1 = Math.max(0.15, Math.min(1, other.res.confidence || 0.3));
+              const c2 = Math.max(0.15, Math.min(1, res.confidence || 0.3));
+              const sw = c1 + c2;
+              const fusedX = (other.res.board.x * c1 + res.board.x * c2) / sw;
+              const fusedY = (other.res.board.y * c1 + res.board.y * c2) / sw;
+              const disagreement = Math.hypot(other.res.board.x - res.board.x, other.res.board.y - res.board.y);
+              const merged = Scoring.fromBoard(fusedX, fusedY, engine.cfg.radii);
+              const fusedConfidence = Math.max(0, Math.min(0.99, (c1 + c2) / 2 * Math.exp(-disagreement / 20) + 0.05));
+              Object.assign(merged, { fused: true, cam: res.cam, confidence: fusedConfidence, cameraAgreement: disagreement });
               fuse.recent = fuse.recent.filter(x => x !== other);
               markOnBoard(merged);
               recordHit(merged, 'Kameras zusammengeführt');
@@ -3558,7 +3711,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       localStorage.setItem(slot.storageKey, code);
       slot.codeEl.textContent = code.slice(0, 3) + ' ' + code.slice(3);
       slot.qrEl.innerHTML = '';
-      if (typeof QRCode !== 'undefined') new QRCode(slot.qrEl, { text: `https://dartly-28836.web.app/camera.html?code=${code}`, width: 64, height: 64, colorDark: '#000', colorLight: '#fff', correctLevel: QRCode.CorrectLevel.M });
+      if (typeof QRCode !== 'undefined') new QRCode(slot.qrEl, { text: `https://greenluc.github.io/AUTODARTS/camera_stream.html?code=${code}`, width: 64, height: 64, colorDark: '#000', colorLight: '#fff', correctLevel: QRCode.CorrectLevel.M });
     }
     const randomCode = () => String(Math.floor(100000 + Math.random() * 900000));
     slots.forEach(s => {
@@ -3731,11 +3884,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     try {
-      const [{ initializeApp }, { getFirestore, doc, setDoc, onSnapshot, arrayUnion }] = await Promise.all([
-        import('https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js'),
+      // Gleiche Firebase-Config wie camera_stream.html (Projekt dart-karriere-app)
+      const [{ db }, { doc, setDoc, onSnapshot, arrayUnion }] = await Promise.all([
+        import('./firebase_config.js'),
         import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js')
       ]);
-      const db = getFirestore(initializeApp({ projectId: 'dartly-28836', apiKey: 'AIzaSyDummyKeyForFirestore' }));
       fbDeps = { db, fs: { doc, setDoc, onSnapshot, arrayUnion }, RTCPeerConnection: window.RTCPeerConnection };
       activeSlots().forEach(s => { if (s.sourceSelect.value === 'remote') startReceiver(s); });
     } catch (e) { console.error(e); statusEl.textContent = 'WebRTC Offline'; }
